@@ -2,14 +2,14 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ProtectedRoute } from "@/components/protected-route"
-import { ArrowLeft, UserPlus, Trash2, Search } from "lucide-react"
+import { ArrowLeft, UserPlus, Trash2, Search, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useAuth } from "@/lib/auth-context"
@@ -22,13 +22,11 @@ interface NewUser {
 }
 
 export default function UsuariosPage() {
-  const { isGlobalAdmin, user } = useAuth()
+  const { isGlobalAdmin, createUser, getAllUsers, deleteUser } = useAuth()
 
-  const [users, setUsers] = useState([
-    { id: 1, name: "Administrador Global", email: "globaladmin@example.com", role: "global-admin" },
-    { id: 2, name: "Administrador", email: "admin@example.com", role: "admin" },
-    { id: 3, name: "Usuario Normal", email: "user@example.com", role: "user" },
-  ])
+  const [users, setUsers] = useState<Array<{ id: string; email: string; role: string; name: string }>>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isCreating, setIsCreating] = useState(false)
 
   const [newUser, setNewUser] = useState<NewUser>({
     name: "",
@@ -38,61 +36,73 @@ export default function UsuariosPage() {
   })
 
   const [message, setMessage] = useState("")
+  const [messageType, setMessageType] = useState<"success" | "error">("success")
 
   const [searchTerm, setSearchTerm] = useState("")
   const [roleFilter, setRoleFilter] = useState<"all" | "global-admin" | "admin" | "user">("all")
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  // Cargar usuarios al iniciar
+  useEffect(() => {
+    loadUsers()
+  }, [])
+
+  const loadUsers = async () => {
+    setIsLoading(true)
+    const usersData = await getAllUsers()
+    setUsers(usersData)
+    setIsLoading(false)
+  }
+
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
+    setIsCreating(true)
 
-    const userExists = users.some((u) => u.email === newUser.email)
-    if (userExists) {
-      setMessage("Este correo ya está registrado")
-      return
+    const result = await createUser(newUser.email, newUser.password, newUser.role, newUser.name)
+
+    if (result.success) {
+      setMessageType("success")
+      setMessage(result.message)
+      setNewUser({
+        name: "",
+        email: "",
+        password: "",
+        role: "user",
+      })
+      await loadUsers() // Recargar lista de usuarios
+    } else {
+      setMessageType("error")
+      setMessage(result.message)
     }
 
-    const newUserData = {
-      id: users.length + 1,
-      name: newUser.name,
-      email: newUser.email,
-      role: newUser.role,
-    }
-
-    setUsers([...users, newUserData])
-    setMessage("Usuario creado exitosamente")
-
-    setNewUser({
-      name: "",
-      email: "",
-      password: "",
-      role: "user",
-    })
-
+    setIsCreating(false)
     setTimeout(() => setMessage(""), 3000)
   }
 
-  const handleDeleteUser = (id: number, userRole: string) => {
-    if (id <= 3) {
-      setMessage("No puedes eliminar usuarios de demostración")
-      setTimeout(() => setMessage(""), 3000)
-      return
-    }
-
+  const handleDeleteUser = async (userId: string, userRole: string) => {
     if (!isGlobalAdmin && userRole === "global-admin") {
+      setMessageType("error")
       setMessage("No tienes permisos para eliminar administradores globales")
       setTimeout(() => setMessage(""), 3000)
       return
     }
 
-    setUsers(users.filter((u) => u.id !== id))
-    setMessage("Usuario eliminado")
+    try {
+      await deleteUser(userId)
+      setMessageType("success")
+      setMessage("Usuario eliminado exitosamente")
+      await loadUsers() // Recargar lista
+    } catch (error) {
+      setMessageType("error")
+      setMessage("Error al eliminar usuario")
+    }
+
     setTimeout(() => setMessage(""), 3000)
   }
 
   const filteredUsers = users.filter((user) => {
-    const matchesSearch =
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = 
+      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.name.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesRole = roleFilter === "all" || user.role === roleFilter
     return matchesSearch && matchesRole
   })
@@ -148,6 +158,7 @@ export default function UsuariosPage() {
                       id="name"
                       value={newUser.name}
                       onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                      placeholder="Ej: Juan Pérez"
                       required
                     />
                   </div>
@@ -193,13 +204,22 @@ export default function UsuariosPage() {
                   </div>
 
                   {message && (
-                    <Alert>
-                      <AlertDescription>{message}</AlertDescription>
+                    <Alert className={messageType === "error" ? "border-red-500 bg-red-50" : "border-green-500 bg-green-50"}>
+                      <AlertDescription className={messageType === "error" ? "text-red-800" : "text-green-800"}>
+                        {message}
+                      </AlertDescription>
                     </Alert>
                   )}
 
-                  <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
-                    Crear Usuario
+                  <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={isCreating}>
+                    {isCreating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Creando...
+                      </>
+                    ) : (
+                      "Crear Usuario"
+                    )}
                   </Button>
                 </form>
               </CardContent>
@@ -238,7 +258,12 @@ export default function UsuariosPage() {
                 </div>
 
                 <div className="space-y-3">
-                  {filteredUsers.length === 0 ? (
+                  {isLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                      <span className="ml-2 text-neutral-600">Cargando usuarios...</span>
+                    </div>
+                  ) : filteredUsers.length === 0 ? (
                     <p className="text-center text-neutral-500 py-4">No se encontraron usuarios</p>
                   ) : (
                     filteredUsers.map((user) => (

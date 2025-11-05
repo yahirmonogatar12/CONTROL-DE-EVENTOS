@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { QRCodeSVG } from "qrcode.react"
 import { useAuth, type Event } from "@/lib/auth-context"
-import { Download, Trash2, Users, Copy, Check, Camera } from "lucide-react"
+import { Download, Trash2, Users, Copy, Check, Camera, MapPin, ExternalLink } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,9 +19,20 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { RegisterWithCodeDialog } from "@/components/register-with-code-dialog"
+import { EmbeddedMap } from "@/components/embedded-map"
 
 interface EventCardProps {
   event: Event
+}
+
+// Helper para extraer coordenadas de la ubicación
+function parseLocation(location: string): { address: string; lat?: number; lng?: number } {
+  if (location.includes('|')) {
+    const [address, coords] = location.split('|')
+    const [lat, lng] = coords.split(',').map(Number)
+    return { address, lat, lng }
+  }
+  return { address: location }
 }
 
 export function EventCard({ event }: EventCardProps) {
@@ -92,7 +103,27 @@ export function EventCard({ event }: EventCardProps) {
             <div className="flex-1 text-center sm:text-left">
               <h3 className="text-lg md:text-xl font-semibold text-neutral-900 mb-2">{event.title}</h3>
               <p className="text-sm md:text-base text-neutral-600 mb-1">{event.date}</p>
-              <p className="text-sm md:text-base text-neutral-600">{event.location}</p>
+              
+              <div className="flex items-start gap-2 mb-2">
+                <MapPin className="w-4 h-4 text-neutral-500 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm md:text-base text-neutral-600">{parseLocation(event.location).address}</p>
+                  {parseLocation(event.location).lat && (
+                    <Button
+                      variant="link"
+                      className="h-auto p-0 text-xs text-blue-600 hover:text-blue-700"
+                      onClick={() => {
+                        const { lat, lng } = parseLocation(event.location)
+                        window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank')
+                      }}
+                    >
+                      <ExternalLink className="w-3 h-3 mr-1" />
+                      Ver en Google Maps
+                    </Button>
+                  )}
+                </div>
+              </div>
+              
               {event.description && <p className="text-sm text-neutral-500 mt-2">{event.description}</p>}
               
               {isAdmin && (
@@ -155,6 +186,18 @@ export function EventCard({ event }: EventCardProps) {
                 <Trash2 className="w-4 h-4 mr-2" />
                 Eliminar
               </Button>
+            </div>
+          )}
+
+          {/* Mapa embebido para TODOS los usuarios cuando hay coordenadas */}
+          {parseLocation(event.location).lat && (
+            <div className="mb-3">
+              <EmbeddedMap 
+                latitude={parseLocation(event.location).lat!} 
+                longitude={parseLocation(event.location).lng!}
+                title={`Ubicación: ${event.title}`}
+                height="250px"
+              />
             </div>
           )}
 

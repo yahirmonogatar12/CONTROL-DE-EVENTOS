@@ -11,14 +11,16 @@ import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth-context"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { CalendarIcon } from "lucide-react"
+import { CalendarIcon, MapPin, Search } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
+import { EmbeddedMap } from "@/components/embedded-map"
+import { LocationPicker } from "@/components/location-picker"
 
 interface CreateEventDialogProps {
   open: boolean
-  onOpenChange: (open: boolean) => void
+  onOpenChange: (open: boolean)=> void
 }
 
 export function CreateEventDialog({ open, onOpenChange }: CreateEventDialogProps) {
@@ -28,18 +30,102 @@ export function CreateEventDialog({ open, onOpenChange }: CreateEventDialogProps
     title: "",
     location: "",
     description: "",
+    latitude: null as number | null,
+    longitude: null as number | null,
   })
+  const [searchQuery, setSearchQuery] = useState("")
+  const [isSearching, setIsSearching] = useState(false)
+  const [showLocationPicker, setShowLocationPicker] = useState(false)
+
+  const handleLocationSelect = (location: { address: string; lat: number; lng: number }) => {
+    setFormData({
+      ...formData,
+      location: location.address.split(',')[0], // Usar solo la primera parte de la dirección
+      latitude: location.lat,
+      longitude: location.lng
+    })
+  }
+
+  const handleSearchLocation = async () => {
+    const query = formData.location
+    if (!query) return
+    
+    setIsSearching(true)
+    
+    try {
+      // Usar Nominatim de OpenStreetMap para geocodificación (gratis, sin API key)
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
+        {
+          headers: {
+            'User-Agent': 'EventRegistrationApp/1.0'
+          }
+        }
+      )
+      
+      const data = await response.json()
+      
+      if (data && data.length > 0) {
+        const result = data[0]
+        setFormData({
+          ...formData,
+          latitude: parseFloat(result.lat),
+          longitude: parseFloat(result.lon),
+        })
+        alert(`✓ Ubicación encontrada: ${result.display_name}`)
+      } else {
+        alert("No se encontró la ubicación. Intenta ser más específico o usa 'Mi Ubicación'")
+      }
+    } catch (error) {
+      console.error("Error buscando ubicación:", error)
+      alert("Error al buscar la ubicación. Intenta de nuevo.")
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
+  const handleUseCurrentLocation = () => {
+    if (navigator.geolocation) {
+      setIsSearching(true)
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setFormData({
+            ...formData,
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            location: formData.location || `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`
+          })
+          setIsSearching(false)
+        },
+        (error) => {
+          console.error("Error getting location:", error)
+          alert("No se pudo obtener la ubicación actual")
+          setIsSearching(false)
+        }
+      )
+    } else {
+      alert("Tu navegador no soporta geolocalización")
+    }
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Construir la ubicación con coordenadas si están disponibles
+    let locationString = formData.location
+    if (formData.latitude && formData.longitude) {
+      locationString = `${formData.location}|${formData.latitude},${formData.longitude}`
+    }
+    
     createEvent({
       title: formData.title,
       date: format(date, "dd 'de' MMMM 'de' yyyy", { locale: es }),
-      location: formData.location,
+      location: locationString,
       description: formData.description,
     })
     onOpenChange(false)
-    setFormData({ title: "", location: "", description: "" })
+    setFormData({ title: "", location: "", description: "", latitude: null, longitude: null })
+    setSearchQuery("")
     setDate(new Date())
   }
 
@@ -100,9 +186,50 @@ export function CreateEventDialog({ open, onOpenChange }: CreateEventDialogProps
               required
               value={formData.location}
               onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-              placeholder="Ej: Centro Vecinal"
+              placeholder="Ej: Centro Vecinal, Calle Principal #123"
               className="h-11"
             />
+            
+            <div className="flex gap-2 mt-2">
+              <Button
+                type="button"
+                variant="default"
+                onClick={() => setShowLocationPicker(true)}
+                className="flex-1 h-10 bg-blue-600 hover:bg-blue-700"
+              >
+                <Search className="w-4 h-4 mr-2" />
+                Seleccionar en Mapa
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleUseCurrentLocation}
+                className="flex-1 h-10"
+                disabled={isSearching}
+              >
+                <MapPin className="w-4 h-4 mr-2" />
+                {isSearching ? "Obteniendo..." : "Mi Ubicación"}
+              </Button>
+            </div>
+            
+            <p className="text-xs text-neutral-500 mb-2">
+              �️ <strong>Seleccionar en Mapa:</strong> Busca visualmente la ubicación con Google Maps<br/>
+              📍 <strong>Mi Ubicación:</strong> Usa tu GPS actual si estás en el lugar
+            </p>
+            
+            {formData.latitude && formData.longitude && (
+              <div className="space-y-2">
+                <div className="text-xs text-green-600 bg-green-50 p-2 rounded border border-green-200 font-medium">
+                  ✓ Coordenadas capturadas: {formData.latitude.toFixed(6)}, {formData.longitude.toFixed(6)}
+                </div>
+                <EmbeddedMap 
+                  latitude={formData.latitude} 
+                  longitude={formData.longitude}
+                  title="Vista previa de ubicación"
+                  height="200px"
+                />
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -128,6 +255,14 @@ export function CreateEventDialog({ open, onOpenChange }: CreateEventDialogProps
           </div>
         </form>
       </DialogContent>
+
+      {/* Selector de ubicación con mapa */}
+      <LocationPicker
+        open={showLocationPicker}
+        onOpenChange={setShowLocationPicker}
+        onLocationSelect={handleLocationSelect}
+        initialAddress={formData.location}
+      />
     </Dialog>
   )
 }

@@ -2,28 +2,27 @@
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import { supabase } from "./supabase"
+import bcrypt from "bcryptjs"
 
 export type UserRole = "global-admin" | "admin" | "user" | null
 
 interface CardData {
+  referente: string
   name: string
-  apellidoPaterno?: string
-  apellidoMaterno?: string
-  curp?: string
-  sex: string
-  age: string
-  address: string
-  phone: string
-  folioNo?: string
-  distrito?: string
-  seccion?: string
-  calleNumero?: string
-  colonia?: string
-  programas?: string[]
-  fecha?: string
-  responsableCaptura?: string
-  cancelada?: boolean
-  observaciones?: string
+  apellidoPaterno: string
+  apellidoMaterno: string
+  telefono: string
+  correoElectronico: string
+  calleNumero: string
+  colonia: string
+  municipio: string
+  estado: string
+  edad: number
+  sexo: string
+  seccion: string
+  necesidad: string
+  buzon: string
+  seguimientoBuzon: string
 }
 
 interface User {
@@ -54,6 +53,7 @@ interface AuthContextType {
   isAdmin: boolean
   isGlobalAdmin: boolean
   registerCard: (cardData: CardData) => Promise<void>
+  updateCard: (cardData: CardData) => Promise<void>
   hasCard: boolean
   events: Event[]
   createEvent: (eventData: Omit<Event, "id" | "qrCode" | "confirmationCode" | "attendees" | "createdBy">) => Promise<void>
@@ -61,6 +61,9 @@ interface AuthContextType {
   registerAttendance: (eventId: string, userEmail: string) => Promise<void>
   registerAttendanceByCode: (confirmationCode: string, userEmail: string) => Promise<boolean>
   getAllUserCards: () => Promise<Array<{ email: string; name: string; card: CardData }>>
+  createUser: (email: string, password: string, role: UserRole, name?: string) => Promise<{ success: boolean; message: string }>
+  getAllUsers: () => Promise<Array<{ id: string; email: string; role: string; name: string }>>
+  deleteUser: (userId: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -107,7 +110,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single()
 
       if (data && !error) {
-        setUser((prev) => prev ? { ...prev, card: data as CardData } : null)
+        // Mapear los campos de la DB al formato de CardData
+        const cardData: CardData = {
+          referente: data.referente,
+          name: data.nombre,
+          apellidoPaterno: data.apellido_paterno,
+          apellidoMaterno: data.apellido_materno,
+          telefono: data.telefono,
+          correoElectronico: data.correo_electronico,
+          calleNumero: data.calle_numero,
+          colonia: data.colonia,
+          municipio: data.municipio,
+          estado: data.estado,
+          edad: data.edad,
+          sexo: data.sexo,
+          seccion: data.seccion,
+          necesidad: data.necesidad,
+          buzon: data.buzon,
+          seguimientoBuzon: data.seguimiento_buzon,
+        }
+        setUser((prev) => prev ? { ...prev, card: cardData } : null)
       }
     } catch (error) {
       console.error("Error loading card:", error)
@@ -152,24 +174,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    try {
+      console.log("🔐 Intentando login para:", email)
 
-    const foundUser = DEMO_USERS.find((u) => u.email === email && u.password === password)
+      // Buscar usuario en Supabase
+      const { data: userData, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("email", email)
+        .single()
 
-    if (foundUser) {
-      const userData: User = {
-        id: email, // En producción, esto vendría de Supabase Auth
-        email: foundUser.email,
-        role: foundUser.role,
-        name: foundUser.name,
+      if (error || !userData) {
+        console.error("❌ Usuario no encontrado:", error)
+        return false
       }
-      setUser(userData)
-      localStorage.setItem("user", JSON.stringify(userData))
+
+      console.log("👤 Usuario encontrado, verificando contraseña...")
+      console.log("🔑 Hash en DB:", userData.password.substring(0, 20) + "...")
+
+      // Verificar contraseña hasheada
+      const passwordMatch = await bcrypt.compare(password, userData.password)
+      console.log("🔐 Resultado comparación:", passwordMatch)
+
+      if (!passwordMatch) {
+        console.error("❌ Contraseña incorrecta")
+        return false
+      }
+
+      console.log("✅ Login exitoso")
+
+      // Crear objeto de usuario
+      const user: User = {
+        id: userData.id,
+        email: userData.email,
+        role: userData.role,
+        name: userData.name || userData.email.split("@")[0],
+      }
+
+      setUser(user)
+      localStorage.setItem("user", JSON.stringify(user))
       await loadUserCard(email)
       return true
+    } catch (error) {
+      console.error("❌ Error en login:", error)
+      return false
     }
-
-    return false
   }
 
   const logout = () => {
@@ -181,27 +230,112 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return
 
     try {
+      console.log("🔍 Intentando registrar tarjeta para:", user.email)
+      console.log("📝 Datos de la tarjeta:", cardData)
+      
       const { data, error } = await supabase
         .from("cards")
         .upsert({
           user_email: user.email,
-          ...cardData,
+          referente: cardData.referente,
+          nombre: cardData.name,
           apellido_paterno: cardData.apellidoPaterno,
           apellido_materno: cardData.apellidoMaterno,
-          folio_no: cardData.folioNo,
+          telefono: cardData.telefono,
+          correo_electronico: cardData.correoElectronico,
           calle_numero: cardData.calleNumero,
-          responsable_captura: cardData.responsableCaptura,
+          colonia: cardData.colonia,
+          municipio: cardData.municipio,
+          estado: cardData.estado,
+          edad: cardData.edad,
+          sexo: cardData.sexo,
+          seccion: cardData.seccion,
+          necesidad: cardData.necesidad,
+          buzon: cardData.buzon,
+          seguimiento_buzon: cardData.seguimientoBuzon,
         })
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error("❌ Error de Supabase:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
+        throw error
+      }
 
+      console.log("✅ Tarjeta registrada exitosamente:", data)
       const updatedUser = { ...user, card: cardData }
       setUser(updatedUser)
       localStorage.setItem("user", JSON.stringify(updatedUser))
-    } catch (error) {
-      console.error("Error registering card:", error)
+    } catch (error: any) {
+      console.error("❌ Error registering card:", {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code,
+        full: error
+      })
+      throw error
+    }
+  }
+
+  const updateCard = async (cardData: CardData) => {
+    if (!user) return
+
+    try {
+      console.log("🔄 Actualizando tarjeta para:", user.email)
+      console.log("📝 Nuevos datos:", cardData)
+      
+      const { data, error } = await supabase
+        .from("cards")
+        .update({
+          referente: cardData.referente,
+          nombre: cardData.name,
+          apellido_paterno: cardData.apellidoPaterno,
+          apellido_materno: cardData.apellidoMaterno,
+          telefono: cardData.telefono,
+          correo_electronico: cardData.correoElectronico,
+          calle_numero: cardData.calleNumero,
+          colonia: cardData.colonia,
+          municipio: cardData.municipio,
+          estado: cardData.estado,
+          edad: cardData.edad,
+          sexo: cardData.sexo,
+          seccion: cardData.seccion,
+          necesidad: cardData.necesidad,
+          buzon: cardData.buzon,
+          seguimiento_buzon: cardData.seguimientoBuzon,
+        })
+        .eq("user_email", user.email)
+        .select()
+        .single()
+
+      if (error) {
+        console.error("❌ Error de Supabase al actualizar:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
+        throw error
+      }
+
+      console.log("✅ Tarjeta actualizada exitosamente:", data)
+      const updatedUser = { ...user, card: cardData }
+      setUser(updatedUser)
+      localStorage.setItem("user", JSON.stringify(updatedUser))
+    } catch (error: any) {
+      console.error("❌ Error updating card:", {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code,
+        full: error
+      })
       throw error
     }
   }
@@ -213,6 +347,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const confirmationCode = Math.random().toString(36).substring(2, 8).toUpperCase()
       const eventId = Date.now().toString()
       const qrCode = `EVENT-${eventId}-${confirmationCode}`
+
+      console.log("🎉 Creando evento:", {
+        title: eventData.title,
+        code: confirmationCode,
+        createdBy: user.id
+      })
 
       const { data, error } = await supabase
         .from("events")
@@ -228,30 +368,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error("❌ Error de Supabase al crear evento:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
+        throw error
+      }
 
+      console.log("✅ Evento creado exitosamente:", data)
       await loadEvents()
-    } catch (error) {
-      console.error("Error creating event:", error)
+    } catch (error: any) {
+      console.error("❌ Error creating event:", {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code,
+        full: error
+      })
       throw error
     }
   }
 
   const deleteEvent = async (eventId: string) => {
     try {
+      console.log("🗑️ Eliminando evento:", eventId)
+
       const { error } = await supabase.from("events").delete().eq("id", eventId)
 
-      if (error) throw error
+      if (error) {
+        console.error("❌ Error al eliminar evento:", error)
+        throw error
+      }
 
+      console.log("✅ Evento eliminado exitosamente")
       await loadEvents()
     } catch (error) {
-      console.error("Error deleting event:", error)
+      console.error("❌ Error deleting event:", error)
       throw error
     }
   }
 
   const registerAttendance = async (eventId: string, userEmail: string) => {
     try {
+      console.log("📝 Registrando asistencia:", { eventId, userEmail })
+
       const { error } = await supabase.from("event_attendees").insert({
         event_id: eventId,
         user_email: userEmail,
@@ -259,28 +422,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error && error.code !== "23505") {
         // 23505 es duplicate key (ya está registrado)
+        console.error("❌ Error al registrar asistencia:", error)
         throw error
+      }
+
+      if (error && error.code === "23505") {
+        console.log("⚠️ Usuario ya registrado en este evento")
+      } else {
+        console.log("✅ Asistencia registrada exitosamente")
       }
 
       await loadEvents()
     } catch (error) {
-      console.error("Error registering attendance:", error)
+      console.error("❌ Error registering attendance:", error)
       throw error
     }
   }
 
   const registerAttendanceByCode = async (confirmationCode: string, userEmail: string): Promise<boolean> => {
     try {
+      console.log("🎫 Registrando con código:", confirmationCode, "para:", userEmail)
+
       // Buscar evento por código
       const { data: event, error: eventError } = await supabase
         .from("events")
-        .select("id")
-        .eq("confirmation_code", confirmationCode)
+        .select("id, title")
+        .eq("confirmation_code", confirmationCode.toUpperCase())
         .single()
 
       if (eventError || !event) {
+        console.error("❌ Evento no encontrado con código:", confirmationCode)
         return false
       }
+
+      console.log("✅ Evento encontrado:", event.title)
 
       // Verificar si ya está registrado
       const { data: existing } = await supabase
@@ -291,6 +466,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single()
 
       if (existing) {
+        console.log("⚠️ Usuario ya registrado en este evento")
         return false // Ya está registrado
       }
 
@@ -300,8 +476,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user_email: userEmail,
       })
 
-      if (error) throw error
+      if (error) {
+        console.error("❌ Error al insertar asistencia:", error)
+        throw error
+      }
 
+      console.log("✅ Asistencia registrada exitosamente")
       await loadEvents()
       return true
     } catch (error) {
@@ -318,31 +498,113 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return (data || []).map((card) => ({
         email: card.user_email,
-        name: card.name,
+        name: card.nombre,
         card: {
-          name: card.name,
+          referente: card.referente,
+          name: card.nombre,
           apellidoPaterno: card.apellido_paterno,
           apellidoMaterno: card.apellido_materno,
-          curp: card.curp,
-          sex: card.sex,
-          age: card.age,
-          address: card.address,
-          phone: card.phone,
-          folioNo: card.folio_no,
-          distrito: card.distrito,
-          seccion: card.seccion,
+          telefono: card.telefono,
+          correoElectronico: card.correo_electronico,
           calleNumero: card.calle_numero,
           colonia: card.colonia,
-          programas: card.programas,
-          fecha: card.fecha,
-          responsableCaptura: card.responsable_captura,
-          cancelada: card.cancelada,
-          observaciones: card.observaciones,
+          municipio: card.municipio,
+          estado: card.estado,
+          edad: card.edad,
+          sexo: card.sexo,
+          seccion: card.seccion,
+          necesidad: card.necesidad,
+          buzon: card.buzon,
+          seguimientoBuzon: card.seguimiento_buzon,
         },
       }))
     } catch (error) {
       console.error("Error getting user cards:", error)
       return []
+    }
+  }
+
+  const createUser = async (email: string, password: string, role: UserRole, name?: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      console.log("👤 Creando nuevo usuario:", email, "con rol:", role)
+
+      // Verificar si el usuario ya existe
+      const { data: existingUser } = await supabase
+        .from("users")
+        .select("email")
+        .eq("email", email)
+        .single()
+
+      if (existingUser) {
+        return { success: false, message: "El usuario ya existe" }
+      }
+
+      // Hashear la contraseña
+      const hashedPassword = await bcrypt.hash(password, 10)
+      console.log("🔐 Contraseña hasheada")
+
+      // Usar el nombre proporcionado o el email como fallback
+      const userName = name || email.split("@")[0]
+
+      // Insertar usuario en Supabase
+      const { data, error } = await supabase
+        .from("users")
+        .insert({
+          email,
+          name: userName,
+          password: hashedPassword,
+          role: role || "user",
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error("❌ Error al crear usuario:", error)
+        return { success: false, message: error.message }
+      }
+
+      console.log("✅ Usuario creado exitosamente:", data)
+      return { success: true, message: "Usuario creado exitosamente" }
+    } catch (error: any) {
+      console.error("❌ Error al crear usuario:", error)
+      return { success: false, message: error?.message || "Error desconocido" }
+    }
+  }
+
+  const getAllUsers = async (): Promise<Array<{ id: string; email: string; role: string; name: string }>> => {
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, email, role, name")
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+
+      return data || []
+    } catch (error) {
+      console.error("Error getting users:", error)
+      return []
+    }
+  }
+
+  const deleteUser = async (userId: string): Promise<void> => {
+    try {
+      console.log("🗑️ Eliminando usuario:", userId)
+
+      const { error } = await supabase
+        .from("users")
+        .delete()
+        .eq("id", userId)
+
+      if (error) {
+        console.error("❌ Error al eliminar usuario:", error)
+        throw error
+      }
+
+      console.log("✅ Usuario eliminado exitosamente")
+    } catch (error) {
+      console.error("Error deleting user:", error)
+      throw error
     }
   }
 
@@ -360,6 +622,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAdmin: user?.role === "admin" || user?.role === "global-admin",
         isGlobalAdmin: user?.role === "global-admin",
         registerCard,
+        updateCard,
         hasCard: !!user?.card,
         events,
         createEvent,
@@ -367,6 +630,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         registerAttendance,
         registerAttendanceByCode,
         getAllUserCards,
+        createUser,
+        getAllUsers,
+        deleteUser,
       }}
     >
       {children}
