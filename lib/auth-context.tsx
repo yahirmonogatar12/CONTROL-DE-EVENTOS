@@ -4,6 +4,16 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from "
 import { supabase } from "./supabase"
 import bcrypt from "bcryptjs"
 
+// URL base para producción
+const getBaseUrl = () => {
+  // En producción, usar siempre la URL de Vercel
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return 'https://control-de-eventos.vercel.app'
+  }
+  // En desarrollo, usar localhost
+  return typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
+}
+
 export type UserRole = "global-admin" | "admin" | "user" | null
 
 interface CardData {
@@ -298,14 +308,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithGoogle = async () => {
     try {
-      const redirectUrl = process.env.NEXT_PUBLIC_APP_URL 
-        ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`
-        : `${window.location.origin}/auth/callback`
+      const baseUrl = getBaseUrl()
       
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: redirectUrl,
+          redirectTo: `${baseUrl}/auth/callback`,
         },
       })
 
@@ -318,14 +326,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithApple = async () => {
     try {
-      const redirectUrl = process.env.NEXT_PUBLIC_APP_URL 
-        ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`
-        : `${window.location.origin}/auth/callback`
+      const baseUrl = getBaseUrl()
       
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'apple',
         options: {
-          redirectTo: redirectUrl,
+          redirectTo: `${baseUrl}/auth/callback`,
         },
       })
 
@@ -352,15 +358,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Crear usuario en Supabase Auth (esto enviará el correo de verificación)
-      const redirectUrl = process.env.NEXT_PUBLIC_APP_URL 
-        ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`
-        : `${window.location.origin}/auth/callback`
+      const baseUrl = getBaseUrl()
       
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: redirectUrl,
+          emailRedirectTo: `${baseUrl}/auth/callback`,
           data: {
             full_name: name,
           }

@@ -2,6 +2,15 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+// Función para obtener la URL base correcta
+const getBaseUrl = (requestUrl: URL) => {
+  // Si no es localhost, usar siempre la URL de producción
+  if (requestUrl.hostname !== 'localhost') {
+    return 'https://control-de-eventos.vercel.app'
+  }
+  return requestUrl.origin
+}
+
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
@@ -46,8 +55,7 @@ export async function GET(request: NextRequest) {
         }
         
         // Crear un script para guardar en localStorage desde el cliente
-        // Usar la URL correcta dependiendo del entorno
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || requestUrl.origin
+        const baseUrl = getBaseUrl(requestUrl)
         const response = NextResponse.redirect(new URL('/', baseUrl))
         response.headers.set('Set-Cookie', `user_data=${JSON.stringify(userForStorage)}; Path=/; Max-Age=86400; SameSite=Lax`)
         return response
@@ -56,6 +64,6 @@ export async function GET(request: NextRequest) {
   }
 
   // Redirigir al inicio
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || requestUrl.origin
+  const baseUrl = getBaseUrl(requestUrl)
   return NextResponse.redirect(new URL('/', baseUrl))
 }
