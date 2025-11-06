@@ -22,6 +22,14 @@ export default function EventosPage() {
 
   const canCreateEvents = user?.role === "admin" || user?.role === "global-admin"
 
+  const handleRegisterCodeClick = () => {
+    if (!user?.card) {
+      alert("Debes registrar tu tarjeta antes de asistir a eventos")
+      return
+    }
+    setShowRegisterCodeDialog(true)
+  }
+
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-white pb-20">
@@ -39,7 +47,7 @@ export default function EventosPage() {
               <div className="flex gap-2 w-full sm:w-auto">
                 {!canCreateEvents && activeTab === "eventos" && (
                   <Button
-                    onClick={() => setShowRegisterCodeDialog(true)}
+                    onClick={handleRegisterCodeClick}
                     variant="outline"
                     className="flex-1 sm:flex-none"
                   >

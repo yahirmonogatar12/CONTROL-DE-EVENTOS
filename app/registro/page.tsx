@@ -10,57 +10,71 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { LogIn, AlertCircle } from "lucide-react"
+import { UserPlus, AlertCircle, CheckCircle } from "lucide-react"
 import Link from "next/link"
 
-export default function LoginPage() {
+export default function RegistroPage() {
+  const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
+  const [success, setSuccess] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
-  const { login, loginWithGoogle /* , loginWithApple */ } = useAuth() // Descomentar loginWithApple cuando esté configurado
+  const { registerWithEmail, loginWithGoogle /* , loginWithApple */ } = useAuth() // Descomentar loginWithApple cuando esté configurado
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
+    setSuccess(false)
+    setEmailSent(false)
+
+    // Validaciones
+    if (password.length < 6) {
+      setError("La contraseña debe tener al menos 6 caracteres")
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setError("Las contraseñas no coinciden")
+      return
+    }
 
     setIsLoading(true)
 
-    try {
-      const success = await login(email, password)
+    const result = await registerWithEmail(email, password, name)
 
-      if (success) {
-        router.push("/")
-      } else {
-        setError("Credenciales incorrectas. Intenta de nuevo.")
-      }
-    } catch (err: any) {
-      setError(err.message || "Error al iniciar sesión")
+    if (result.success) {
+      setEmailSent(true)
+      setSuccess(true)
+    } else {
+      setError(result.message)
     }
 
     setIsLoading(false)
   }
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleRegister = async () => {
     try {
       setIsLoading(true)
       setError("")
       await loginWithGoogle()
     } catch (err) {
-      setError("Error al iniciar sesión con Google. Intenta de nuevo.")
+      setError("Error al registrarse con Google. Intenta de nuevo.")
       setIsLoading(false)
     }
   }
 
   // APPLE SIGN IN - Descomentarlo cuando tengas Apple Developer Account configurado
-  // const handleAppleLogin = async () => {
+  // const handleAppleRegister = async () => {
   //   try {
   //     setIsLoading(true)
   //     setError("")
   //     await loginWithApple()
   //   } catch (err) {
-  //     setError("Error al iniciar sesión con Apple. Intenta de nuevo.")
+  //     setError("Error al registrarse con Apple. Intenta de nuevo.")
   //     setIsLoading(false)
   //   }
   // }
@@ -70,19 +84,33 @@ export default function LoginPage() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4 mx-auto">
-            <LogIn className="w-6 h-6 text-blue-600" />
+            <UserPlus className="w-6 h-6 text-blue-600" />
           </div>
-          <CardTitle className="text-2xl text-center">Iniciar Sesión</CardTitle>
-          <CardDescription className="text-center">Ingresa tus credenciales para acceder al sistema</CardDescription>
+          <CardTitle className="text-2xl text-center">Crear Cuenta</CardTitle>
+          <CardDescription className="text-center">
+            Regístrate para comenzar a asistir a eventos
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Nombre Completo</Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="Juan Pérez"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">Correo Electrónico</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="Ingresa tu correo..."
+                placeholder="ingresa tu correo..."
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -99,6 +127,19 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
+              <p className="text-xs text-neutral-500">Mínimo 6 caracteres</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirmar Contraseña</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+              />
             </div>
 
             {error && (
@@ -108,8 +149,22 @@ export default function LoginPage() {
               </Alert>
             )}
 
-            <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={isLoading}>
-              {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
+            {success && emailSent && (
+              <Alert className="bg-green-50 text-green-900 border-green-200">
+                <CheckCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>¡Cuenta creada!</strong> Te hemos enviado un correo de verificación a <strong>{email}</strong>. 
+                  Por favor, revisa tu bandeja de entrada y haz clic en el enlace para activar tu cuenta.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <Button 
+              type="submit" 
+              className="w-full bg-blue-600 hover:bg-blue-700" 
+              disabled={isLoading || success}
+            >
+              {isLoading ? "Creando cuenta..." : "Crear Cuenta"}
             </Button>
 
             <div className="relative my-4">
@@ -117,7 +172,7 @@ export default function LoginPage() {
                 <span className="w-full border-t" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-muted-foreground">O continúa con</span>
+                <span className="bg-white px-2 text-muted-foreground">O regístrate con</span>
               </div>
             </div>
 
@@ -125,8 +180,8 @@ export default function LoginPage() {
               type="button" 
               variant="outline" 
               className="w-full" 
-              onClick={handleGoogleLogin}
-              disabled={isLoading}
+              onClick={handleGoogleRegister}
+              disabled={isLoading || success}
             >
               <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                 <path
@@ -154,8 +209,8 @@ export default function LoginPage() {
               type="button" 
               variant="outline" 
               className="w-full mt-2" 
-              onClick={handleAppleLogin}
-              disabled={isLoading}
+              onClick={handleAppleRegister}
+              disabled={isLoading || success}
             >
               <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
@@ -164,9 +219,9 @@ export default function LoginPage() {
             </Button> */}
 
             <div className="text-center text-sm text-neutral-600 mt-4">
-              ¿No tienes cuenta?{" "}
-              <Link href="/registro" className="text-blue-600 hover:text-blue-700 font-semibold">
-                Regístrate aquí
+              ¿Ya tienes cuenta?{" "}
+              <Link href="/login" className="text-blue-600 hover:text-blue-700 font-semibold">
+                Iniciar Sesión
               </Link>
             </div>
           </form>

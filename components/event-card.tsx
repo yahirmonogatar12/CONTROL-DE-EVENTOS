@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { QRCodeSVG } from "qrcode.react"
 import { useAuth, type Event } from "@/lib/auth-context"
-import { Download, Trash2, Users, Copy, Check, Camera, MapPin, ExternalLink } from "lucide-react"
+import { Download, Trash2, Users, Copy, Check, Camera, MapPin, ExternalLink, User, Phone, MapPinned, Hash } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,9 +17,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { RegisterWithCodeDialog } from "@/components/register-with-code-dialog"
 import { EmbeddedMap } from "@/components/embedded-map"
+import { Separator } from "@/components/ui/separator"
 
 interface EventCardProps {
   event: Event
@@ -36,35 +37,88 @@ function parseLocation(location: string): { address: string; lat?: number; lng?:
 }
 
 export function EventCard({ event }: EventCardProps) {
-  const { user, deleteEvent, registerAttendance } = useAuth()
+  const { user, deleteEvent, registerAttendance, getEventAttendeesDetailed, suspendEvent } = useAuth()
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showSuspendDialog, setShowSuspendDialog] = useState(false)
+  const [deleteMessage, setDeleteMessage] = useState("")
   const [showQRDialog, setShowQRDialog] = useState(false)
   const [showAttendanceDialog, setShowAttendanceDialog] = useState(false)
   const [showRegisterDialog, setShowRegisterDialog] = useState(false)
+  const [showCardDialog, setShowCardDialog] = useState(false)
+  const [selectedAttendee, setSelectedAttendee] = useState<any>(null)
+  const [attendeesDetailed, setAttendeesDetailed] = useState<any[]>([])
   const [codeCopied, setCodeCopied] = useState(false)
   const isAdmin = user?.role === "admin" || user?.role === "global-admin"
 
+  useEffect(() => {
+    if (showAttendanceDialog && isAdmin) {
+      loadDetailedAttendees()
+    }
+  }, [showAttendanceDialog])
+
+  const loadDetailedAttendees = async () => {
+    const detailed = await getEventAttendeesDetailed(event.id)
+    setAttendeesDetailed(detailed)
+  }
+
+  const handleViewCard = (attendee: any) => {
+    setSelectedAttendee(attendee)
+    setShowCardDialog(true)
+  }
+
   const downloadQRCode = () => {
-    const canvas = document.getElementById(`qr-${event.id}`) as HTMLCanvasElement
-    if (canvas) {
-      const pngUrl = canvas.toDataURL("image/png").replace("image/png", "image/octet-stream")
-      const downloadLink = document.createElement("a")
-      downloadLink.href = pngUrl
-      downloadLink.download = `evento-${event.title.replace(/\s+/g, "-")}.png`
-      document.body.appendChild(downloadLink)
-      downloadLink.click()
-      document.body.removeChild(downloadLink)
+    const svg = document.getElementById(`qr-${event.id}`) as unknown as SVGElement
+    if (svg) {
+      // Convertir SVG a Canvas para poder descargar como PNG
+      const canvas = document.createElement("canvas")
+      const ctx = canvas.getContext("2d")
+      const svgData = new XMLSerializer().serializeToString(svg)
+      const img = new Image()
+      
+      img.onload = () => {
+        canvas.width = img.width
+        canvas.height = img.height
+        ctx?.drawImage(img, 0, 0)
+        const pngUrl = canvas.toDataURL("image/png")
+        
+        const downloadLink = document.createElement("a")
+        downloadLink.href = pngUrl
+        downloadLink.download = `evento-${event.title.replace(/\s+/g, "-")}.png`
+        document.body.appendChild(downloadLink)
+        downloadLink.click()
+        document.body.removeChild(downloadLink)
+      }
+      
+      img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData)))
     }
   }
 
   const handleRegister = () => {
+    // Verificar si el usuario tiene tarjeta
+    if (!user?.card) {
+      alert("Debes registrar tu tarjeta antes de poder asistir a eventos")
+      return
+    }
     // Abrir el diálogo con el escáner QR activado
     setShowRegisterDialog(true)
   }
 
-  const handleDelete = () => {
-    deleteEvent(event.id)
-    setShowDeleteDialog(false)
+  const handleDelete = async () => {
+    const result = await deleteEvent(event.id)
+    
+    if (!result.success && result.hasAttendees) {
+      // Mostrar mensaje y opción de suspender
+      setDeleteMessage(result.message)
+      setShowDeleteDialog(false)
+      setShowSuspendDialog(true)
+    } else if (result.success) {
+      setShowDeleteDialog(false)
+    }
+  }
+
+  const handleSuspend = async () => {
+    await suspendEvent(event.id)
+    setShowSuspendDialog(false)
   }
 
   const copyCodeToClipboard = async () => {
@@ -101,7 +155,14 @@ export function EventCard({ event }: EventCardProps) {
               </div>
             )}
             <div className="flex-1 text-center sm:text-left">
-              <h3 className="text-lg md:text-xl font-semibold text-neutral-900 mb-2">{event.title}</h3>
+              <div className="flex items-center gap-2 mb-2 justify-center sm:justify-start">
+                <h3 className="text-lg md:text-xl font-semibold text-neutral-900">{event.title}</h3>
+                {event.suspended && isAdmin && (
+                  <Badge className="bg-orange-100 text-orange-800 border-orange-300">
+                    Suspendido
+                  </Badge>
+                )}
+              </div>
               <p className="text-sm md:text-base text-neutral-600 mb-1">{event.date}</p>
               
               <div className="flex items-start gap-2 mb-2">
@@ -237,6 +298,23 @@ export function EventCard({ event }: EventCardProps) {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog open={showSuspendDialog} onOpenChange={setShowSuspendDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>No se puede eliminar el evento</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteMessage}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSuspend} className="bg-orange-600 hover:bg-orange-700">
+              Suspender Evento
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog open={showQRDialog} onOpenChange={setShowQRDialog}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -262,25 +340,173 @@ export function EventCard({ event }: EventCardProps) {
       </Dialog>
 
       <Dialog open={showAttendanceDialog} onOpenChange={setShowAttendanceDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Asistentes al Evento</DialogTitle>
+            <DialogDescription>
+              {attendeesDetailed.length} {attendeesDetailed.length === 1 ? 'persona registrada' : 'personas registradas'}
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            {event.attendees.length === 0 ? (
-              <p className="text-center text-neutral-600">No hay asistentes registrados aún</p>
+            {attendeesDetailed.length === 0 ? (
+              <p className="text-center text-neutral-600 py-8">No hay asistentes registrados aún</p>
             ) : (
-              <div className="space-y-2">
-                {event.attendees.map((email, index) => (
-                  <div key={email} className="p-3 bg-neutral-50 rounded-lg">
-                    <p className="text-sm font-medium">
-                      {index + 1}. {email}
-                    </p>
+              <div className="space-y-3">
+                {attendeesDetailed.map((attendee, index) => (
+                  <div key={attendee.user_email} className="p-4 bg-neutral-50 rounded-lg border border-neutral-200 hover:border-neutral-300 transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold bg-blue-600 text-white px-2 py-1 rounded">
+                            #{index + 1}
+                          </span>
+                          <h4 className="text-base font-semibold text-neutral-900">
+                            {attendee.user_name}
+                          </h4>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                          {attendee.referente && (
+                            <div className="flex items-center gap-1.5 text-neutral-600">
+                              <User className="w-4 h-4" />
+                              <span className="text-xs text-neutral-500">Ref:</span>
+                              <span>{attendee.referente}</span>
+                            </div>
+                          )}
+                          
+                          {attendee.telefono && (
+                            <div className="flex items-center gap-1.5 text-neutral-600">
+                              <Phone className="w-4 h-4" />
+                              <span>{attendee.telefono}</span>
+                            </div>
+                          )}
+                          
+                          {attendee.municipio && (
+                            <div className="flex items-center gap-1.5 text-neutral-600">
+                              <MapPinned className="w-4 h-4" />
+                              <span>{attendee.municipio}</span>
+                            </div>
+                          )}
+                          
+                          {attendee.seccion && (
+                            <div className="flex items-center gap-1.5 text-neutral-600">
+                              <Hash className="w-4 h-4" />
+                              <span className="text-xs text-neutral-500">Sec:</span>
+                              <span>{attendee.seccion}</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="text-xs text-neutral-500">
+                          Registrado: {new Date(attendee.attended_at).toLocaleString('es-MX', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </div>
+                      </div>
+                      
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleViewCard(attendee)}
+                        className="w-full sm:w-auto"
+                      >
+                        Ver Tarjeta
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para ver tarjeta completa */}
+      <Dialog open={showCardDialog} onOpenChange={setShowCardDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Tarjeta del Asistente</DialogTitle>
+          </DialogHeader>
+          {selectedAttendee && (
+            <div className="space-y-4 py-4">
+              <div className="text-center pb-4 border-b">
+                <h3 className="text-xl font-bold text-neutral-900">{selectedAttendee.user_name}</h3>
+                <p className="text-sm text-neutral-500">{selectedAttendee.user_email}</p>
+              </div>
+
+              <div className="space-y-3">
+                {selectedAttendee.referente && (
+                  <div>
+                    <p className="text-xs font-medium text-neutral-500">Referente</p>
+                    <p className="text-sm text-neutral-900">{selectedAttendee.referente}</p>
+                  </div>
+                )}
+
+                {selectedAttendee.telefono && (
+                  <div>
+                    <p className="text-xs font-medium text-neutral-500">Teléfono</p>
+                    <p className="text-sm text-neutral-900">{selectedAttendee.telefono}</p>
+                  </div>
+                )}
+
+                {selectedAttendee.correo_electronico && (
+                  <div>
+                    <p className="text-xs font-medium text-neutral-500">Correo</p>
+                    <p className="text-sm text-neutral-900">{selectedAttendee.correo_electronico}</p>
+                  </div>
+                )}
+
+                <Separator />
+
+                {selectedAttendee.municipio && (
+                  <div>
+                    <p className="text-xs font-medium text-neutral-500">Municipio</p>
+                    <p className="text-sm text-neutral-900">{selectedAttendee.municipio}</p>
+                  </div>
+                )}
+
+                {selectedAttendee.seccion && (
+                  <div>
+                    <p className="text-xs font-medium text-neutral-500">Sección</p>
+                    <p className="text-sm text-neutral-900">{selectedAttendee.seccion}</p>
+                  </div>
+                )}
+
+                {(selectedAttendee.edad || selectedAttendee.sexo) && (
+                  <div className="grid grid-cols-2 gap-4">
+                    {selectedAttendee.edad && (
+                      <div>
+                        <p className="text-xs font-medium text-neutral-500">Edad</p>
+                        <p className="text-sm text-neutral-900">{selectedAttendee.edad} años</p>
+                      </div>
+                    )}
+                    {selectedAttendee.sexo && (
+                      <div>
+                        <p className="text-xs font-medium text-neutral-500">Sexo</p>
+                        <p className="text-sm text-neutral-900">{selectedAttendee.sexo}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <Separator />
+
+                <div>
+                  <p className="text-xs font-medium text-neutral-500">Fecha de Registro</p>
+                  <p className="text-sm text-neutral-900">
+                    {new Date(selectedAttendee.attended_at).toLocaleString('es-MX', {
+                      dateStyle: 'full',
+                      timeStyle: 'short'
+                    })}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

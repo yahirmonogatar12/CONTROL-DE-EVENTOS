@@ -17,14 +17,14 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
-  title: "Sistema Social Bienestar",
+  title: "Sistema",
   description: "Sistema de registro de tarjetas y eventos para bienestar social",
   generator: "v0.app",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Sistema Social Bienestar",
+    title: "Sistema",
   },
 }
 

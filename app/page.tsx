@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { CreditCard, Calendar, LogOut, User, Users, FileText } from "lucide-react"
+import { CreditCard, Calendar, LogOut, User, Users, FileText, History } from "lucide-react"
 import { useEffect } from "react"
 
 export default function HomePage() {
@@ -54,7 +54,7 @@ export default function HomePage() {
 
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl md:text-4xl font-bold text-center mb-8 md:mb-12 text-neutral-900">
-          Sistema Social Bienestar
+          Sistema
         </h1>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
@@ -92,6 +92,25 @@ export default function HomePage() {
               </CardHeader>
               <CardContent className="pt-0">
                 <Button className="w-full bg-blue-600 hover:bg-blue-700 text-sm md:text-base">Ir a Eventos</Button>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/mi-historial" className="block">
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
+              <CardHeader className="flex-grow">
+                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                  <History className="w-6 h-6 text-blue-600" />
+                </div>
+                <CardTitle className="text-xl md:text-2xl">Mi Historial</CardTitle>
+                <CardDescription className="text-sm md:text-base">
+                  Revisa todos los eventos a los que has asistido
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <Button className="w-full bg-blue-600 hover:bg-blue-700 text-sm md:text-base">
+                  Ver Mi Historial
+                </Button>
               </CardContent>
             </Card>
           </Link>

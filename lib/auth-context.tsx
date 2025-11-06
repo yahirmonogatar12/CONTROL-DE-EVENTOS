@@ -43,11 +43,15 @@ export interface Event {
   confirmationCode: string
   attendees: string[]
   createdBy: string
+  suspended?: boolean
 }
 
 interface AuthContextType {
   user: User | null
   login: (email: string, password: string) => Promise<boolean>
+  loginWithGoogle: () => Promise<void>
+  loginWithApple: () => Promise<void>
+  registerWithEmail: (email: string, password: string, name: string) => Promise<{ success: boolean; message: string }>
   logout: () => void
   isAuthenticated: boolean
   isAdmin: boolean
@@ -57,9 +61,13 @@ interface AuthContextType {
   hasCard: boolean
   events: Event[]
   createEvent: (eventData: Omit<Event, "id" | "qrCode" | "confirmationCode" | "attendees" | "createdBy">) => Promise<void>
-  deleteEvent: (eventId: string) => Promise<void>
+  deleteEvent: (eventId: string) => Promise<{ success: boolean; message: string; hasAttendees?: boolean }>
+  suspendEvent: (eventId: string) => Promise<void>
   registerAttendance: (eventId: string, userEmail: string) => Promise<void>
   registerAttendanceByCode: (confirmationCode: string, userEmail: string) => Promise<boolean>
+  getUserEventHistory: (userEmail: string) => Promise<any[]>
+  getUserEventStats: (userEmail: string) => Promise<any>
+  getEventAttendeesDetailed: (eventId: string) => Promise<any[]>
   getAllUserCards: () => Promise<Array<{ email: string; name: string; card: CardData }>>
   createUser: (email: string, password: string, role: UserRole, name?: string) => Promise<{ success: boolean; message: string }>
   getAllUsers: () => Promise<Array<{ id: string; email: string; role: string; name: string }>>
@@ -91,12 +99,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loadEvents()
   }, [])
 
-  const loadUser = () => {
-    const storedUser = localStorage.getItem("user")
-    if (storedUser) {
-      const userData = JSON.parse(storedUser)
-      setUser(userData)
-      loadUserCard(userData.email)
+  // Verificar si hay una sesión activa de Supabase Auth (Google OAuth)
+  const checkSupabaseSession = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (session?.user) {
+        // Usuario autenticado con Google
+        const { data: userData, error } = await supabase
+          .from("users")
+          .select("*")
+          .eq("email", session.user.email)
+          .single()
+
+        if (userData && !error) {
+          const user: User = {
+            id: userData.id,
+            email: userData.email,
+            role: userData.role as UserRole,
+            name: userData.name || session.user.user_metadata.full_name || session.user.email?.split("@")[0],
+          }
+
+          setUser(user)
+          localStorage.setItem("user", JSON.stringify(user))
+          await loadUserCard(session.user.email!)
+        }
+      }
+    } catch (error) {
+      console.error("Error checking Supabase session:", error)
+    }
+  }
+
+  const loadUser = async () => {
+    // Primero verificar sesión de Supabase
+    await checkSupabaseSession()
+    
+    // Si no hay sesión de Supabase, cargar desde localStorage
+    if (!user) {
+      const storedUser = localStorage.getItem("user")
+      if (storedUser) {
+        const userData = JSON.parse(storedUser)
+        setUser(userData)
+        loadUserCard(userData.email)
+      }
     }
     setIsLoading(false)
   }
@@ -138,10 +183,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadEvents = async () => {
     try {
-      const { data: eventsData, error: eventsError } = await supabase
+      // Obtener rol del usuario actual
+      const storedUser = localStorage.getItem("user")
+      const currentUser = storedUser ? JSON.parse(storedUser) : null
+      const isAdmin = currentUser?.role === "admin" || currentUser?.role === "global-admin"
+
+      let query = supabase
         .from("events")
         .select("*")
         .order("created_at", { ascending: false })
+
+      // Si no es admin, filtrar eventos suspendidos
+      if (!isAdmin) {
+        query = query.eq("suspended", false)
+      }
+
+      const { data: eventsData, error: eventsError } = await query
 
       if (eventsError) throw eventsError
 
@@ -163,6 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             confirmationCode: event.confirmation_code,
             attendees: attendeesData?.map((a) => a.user_email) || [],
             createdBy: event.created_by,
+            suspended: event.suspended || false,
           }
         })
       )
@@ -177,7 +235,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log("🔐 Intentando login para:", email)
 
-      // Buscar usuario en Supabase
+      // Verificar si el usuario tiene una cuenta en Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (authError) {
+        console.error("❌ Error de autenticación:", authError)
+        
+        // Verificar si el error es por email no confirmado
+        if (authError.message.includes("Email not confirmed")) {
+          throw new Error("Por favor verifica tu correo electrónico antes de iniciar sesión")
+        }
+        
+        return false
+      }
+
+      // Verificar que el email esté confirmado
+      if (authData.user && !authData.user.email_confirmed_at) {
+        console.error("❌ Email no verificado")
+        await supabase.auth.signOut()
+        throw new Error("Por favor verifica tu correo electrónico antes de iniciar sesión")
+      }
+
+      // Buscar usuario en la tabla users
       const { data: userData, error } = await supabase
         .from("users")
         .select("*")
@@ -185,23 +267,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single()
 
       if (error || !userData) {
-        console.error("❌ Usuario no encontrado:", error)
+        console.error("❌ Usuario no encontrado en DB:", error)
+        await supabase.auth.signOut()
         return false
       }
 
-      console.log("👤 Usuario encontrado, verificando contraseña...")
-      console.log("🔑 Hash en DB:", userData.password.substring(0, 20) + "...")
-
-      // Verificar contraseña hasheada
-      const passwordMatch = await bcrypt.compare(password, userData.password)
-      console.log("🔐 Resultado comparación:", passwordMatch)
-
-      if (!passwordMatch) {
-        console.error("❌ Contraseña incorrecta")
-        return false
-      }
-
-      console.log("✅ Login exitoso")
+      console.log("✅ Login exitoso - Email verificado")
 
       // Crear objeto de usuario
       const user: User = {
@@ -221,9 +292,107 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const logout = () => {
+  const loginWithGoogle = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      })
+
+      if (error) throw error
+    } catch (error) {
+      console.error("❌ Error en login con Google:", error)
+      throw error
+    }
+  }
+
+  const loginWithApple = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      })
+
+      if (error) throw error
+    } catch (error) {
+      console.error("❌ Error en login con Apple:", error)
+      throw error
+    }
+  }
+
+  const registerWithEmail = async (email: string, password: string, name: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      console.log("📧 Registrando usuario con email:", email)
+
+      // Verificar si el email ya existe en la tabla users
+      const { data: existingUser } = await supabase
+        .from("users")
+        .select("email")
+        .eq("email", email)
+        .single()
+
+      if (existingUser) {
+        return { success: false, message: "Este correo ya está registrado" }
+      }
+
+      // Crear usuario en Supabase Auth (esto enviará el correo de verificación)
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          data: {
+            full_name: name,
+          }
+        }
+      })
+
+      if (authError) {
+        console.error("❌ Error al crear usuario en Auth:", authError)
+        return { success: false, message: authError.message }
+      }
+
+      if (!authData.user) {
+        return { success: false, message: "Error al crear usuario" }
+      }
+
+      // Hashear la contraseña para la tabla users
+      const hashedPassword = await bcrypt.hash(password, 10)
+
+      // Crear usuario en la tabla users (sin verificar aún)
+      const { error: dbError } = await supabase.from("users").insert({
+        id: authData.user.id,
+        email: email,
+        name: name,
+        role: "user",
+        password: hashedPassword,
+      })
+
+      if (dbError) {
+        console.error("❌ Error al crear usuario en DB:", dbError)
+        return { success: false, message: "Error al crear usuario en la base de datos" }
+      }
+
+      console.log("✅ Usuario registrado exitosamente, correo de verificación enviado")
+      return { 
+        success: true, 
+        message: "Cuenta creada. Por favor verifica tu correo electrónico." 
+      }
+    } catch (error) {
+      console.error("❌ Error en registerWithEmail:", error)
+      return { success: false, message: "Error al crear cuenta" }
+    }
+  }
+
+  const logout = async () => {
     setUser(null)
     localStorage.removeItem("user")
+    // Cerrar sesión de Supabase Auth si existe
+    await supabase.auth.signOut()
   }
 
   const registerCard = async (cardData: CardData) => {
@@ -392,10 +561,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const deleteEvent = async (eventId: string) => {
+  const deleteEvent = async (eventId: string): Promise<{ success: boolean; message: string; hasAttendees?: boolean }> => {
     try {
-      console.log("🗑️ Eliminando evento:", eventId)
+      console.log("🗑️ Intentando eliminar evento:", eventId)
 
+      // Verificar si el evento tiene asistentes
+      const { data: attendees, error: attendeesError } = await supabase
+        .from("event_attendees")
+        .select("id")
+        .eq("event_id", eventId)
+
+      if (attendeesError) {
+        console.error("❌ Error al verificar asistentes:", attendeesError)
+        throw attendeesError
+      }
+
+      // Si tiene asistentes, no permitir eliminar
+      if (attendees && attendees.length > 0) {
+        console.log("⚠️ Evento tiene asistentes, no se puede eliminar")
+        return {
+          success: false,
+          message: `Este evento tiene ${attendees.length} asistente${attendees.length > 1 ? 's' : ''} registrado${attendees.length > 1 ? 's' : ''}. No se puede eliminar. Puedes suspenderlo en su lugar.`,
+          hasAttendees: true
+        }
+      }
+
+      // Si no tiene asistentes, eliminar
       const { error } = await supabase.from("events").delete().eq("id", eventId)
 
       if (error) {
@@ -405,8 +596,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log("✅ Evento eliminado exitosamente")
       await loadEvents()
+      return {
+        success: true,
+        message: "Evento eliminado exitosamente"
+      }
     } catch (error) {
       console.error("❌ Error deleting event:", error)
+      throw error
+    }
+  }
+
+  const suspendEvent = async (eventId: string) => {
+    try {
+      console.log("⏸️ Suspendiendo evento:", eventId)
+
+      const { error } = await supabase
+        .from("events")
+        .update({ suspended: true })
+        .eq("id", eventId)
+
+      if (error) {
+        console.error("❌ Error al suspender evento:", error)
+        throw error
+      }
+
+      console.log("✅ Evento suspendido exitosamente")
+      await loadEvents()
+    } catch (error) {
+      console.error("❌ Error suspending event:", error)
       throw error
     }
   }
@@ -415,6 +632,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log("📝 Registrando asistencia:", { eventId, userEmail })
 
+      // Obtener datos del evento
+      const event = events.find(e => e.id === eventId)
+      if (!event) {
+        throw new Error("Evento no encontrado")
+      }
+
+      // Obtener datos de la tarjeta del usuario
+      const { data: cardData, error: cardError } = await supabase
+        .from("cards")
+        .select("*")
+        .eq("user_email", userEmail)
+        .single()
+
+      if (cardError || !cardData) {
+        console.error("❌ Usuario sin tarjeta registrada")
+        throw new Error("Debes registrar tu tarjeta antes de asistir a eventos")
+      }
+
+      // Registrar en event_attendees (tabla simple)
       const { error } = await supabase.from("event_attendees").insert({
         event_id: eventId,
         user_email: userEmail,
@@ -424,6 +660,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // 23505 es duplicate key (ya está registrado)
         console.error("❌ Error al registrar asistencia:", error)
         throw error
+      }
+
+      // Registrar en historial con datos completos
+      if (!error || error.code !== "23505") {
+        const { error: historyError } = await supabase
+          .from("event_attendance_history")
+          .insert({
+            event_id: eventId,
+            event_title: event.title,
+            event_date: event.date,
+            event_location: event.location,
+            confirmation_code: event.confirmationCode,
+            user_email: userEmail,
+            user_name: cardData.nombre,
+            referente: cardData.referente,
+            telefono: cardData.telefono,
+            correo_electronico: cardData.correo_electronico,
+            municipio: cardData.municipio,
+            seccion: cardData.seccion,
+            edad: cardData.edad,
+            sexo: cardData.sexo,
+          })
+
+        if (historyError) {
+          console.error("⚠️ Error al guardar historial:", historyError)
+        }
       }
 
       if (error && error.code === "23505") {
@@ -443,10 +705,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log("🎫 Registrando con código:", confirmationCode, "para:", userEmail)
 
+      // Verificar que el usuario tenga tarjeta registrada
+      const { data: cardData, error: cardError } = await supabase
+        .from("cards")
+        .select("*")
+        .eq("user_email", userEmail)
+        .single()
+
+      if (cardError || !cardData) {
+        console.error("❌ Usuario sin tarjeta registrada")
+        throw new Error("Debes registrar tu tarjeta antes de asistir a eventos")
+      }
+
       // Buscar evento por código
       const { data: event, error: eventError } = await supabase
         .from("events")
-        .select("id, title")
+        .select("*")
         .eq("confirmation_code", confirmationCode.toUpperCase())
         .single()
 
@@ -479,6 +753,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) {
         console.error("❌ Error al insertar asistencia:", error)
         throw error
+      }
+
+      // Registrar en historial con datos completos
+      const { error: historyError } = await supabase
+        .from("event_attendance_history")
+        .insert({
+          event_id: event.id,
+          event_title: event.title,
+          event_date: event.date,
+          event_location: event.location,
+          confirmation_code: event.confirmation_code,
+          user_email: userEmail,
+          user_name: cardData.nombre,
+          referente: cardData.referente,
+          telefono: cardData?.telefono,
+          correo_electronico: cardData?.correo_electronico,
+          municipio: cardData?.municipio,
+          seccion: cardData?.seccion,
+          edad: cardData?.edad,
+          sexo: cardData?.sexo,
+        })
+
+      if (historyError) {
+        console.error("⚠️ Error al guardar historial:", historyError)
       }
 
       console.log("✅ Asistencia registrada exitosamente")
@@ -608,6 +906,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const getUserEventHistory = async (userEmail: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("event_attendance_history")
+        .select("*")
+        .eq("user_email", userEmail)
+        .order("attended_at", { ascending: false })
+
+      if (error) throw error
+
+      return data || []
+    } catch (error) {
+      console.error("Error getting user event history:", error)
+      return []
+    }
+  }
+
+  const getUserEventStats = async (userEmail: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("event_attendance_history")
+        .select("*")
+        .eq("user_email", userEmail)
+
+      if (error) throw error
+
+      const events = data || []
+      const now = new Date()
+      const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+
+      return {
+        total_events: events.length,
+        unique_events: new Set(events.map(e => e.event_id)).size,
+        events_last_30_days: events.filter(e => new Date(e.attended_at) >= last30Days).length,
+        events_last_7_days: events.filter(e => new Date(e.attended_at) >= last7Days).length,
+        first_event: events.length > 0 ? events[events.length - 1].attended_at : null,
+        last_event: events.length > 0 ? events[0].attended_at : null,
+      }
+    } catch (error) {
+      console.error("Error getting user stats:", error)
+      return {
+        total_events: 0,
+        unique_events: 0,
+        events_last_30_days: 0,
+        events_last_7_days: 0,
+        first_event: null,
+        last_event: null,
+      }
+    }
+  }
+
+  const getEventAttendeesDetailed = async (eventId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("event_attendance_history")
+        .select("*")
+        .eq("event_id", eventId)
+        .order("attended_at", { ascending: false })
+
+      if (error) throw error
+
+      return data || []
+    } catch (error) {
+      console.error("Error getting event attendees:", error)
+      return []
+    }
+  }
+
   if (isLoading) {
     return null
   }
@@ -617,6 +984,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         login,
+        loginWithGoogle,
+        loginWithApple,
+        registerWithEmail,
         logout,
         isAuthenticated: !!user,
         isAdmin: user?.role === "admin" || user?.role === "global-admin",
@@ -627,8 +997,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         events,
         createEvent,
         deleteEvent,
+        suspendEvent,
         registerAttendance,
         registerAttendanceByCode,
+        getUserEventHistory,
+        getUserEventStats,
+        getEventAttendeesDetailed,
         getAllUserCards,
         createUser,
         getAllUsers,
