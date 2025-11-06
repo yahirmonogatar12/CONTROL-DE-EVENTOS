@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { CreditCard, Calendar, LogOut, User, Users, FileText, History } from "lucide-react"
+import { CreditCard, Calendar, LogOut, User, Users, FileText, History, MessageSquare } from "lucide-react"
 import { useEffect } from "react"
 
 export default function HomePage() {
@@ -110,6 +110,27 @@ export default function HomePage() {
               <CardContent className="pt-0">
                 <Button className="w-full bg-blue-600 hover:bg-blue-700 text-sm md:text-base">
                   Ver Mi Historial
+                </Button>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/quejas" className="block">
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full flex flex-col">
+              <CardHeader className="flex-grow">
+                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                  <MessageSquare className="w-6 h-6 text-blue-600" />
+                </div>
+                <CardTitle className="text-xl md:text-2xl">Quejas y Sugerencias</CardTitle>
+                <CardDescription className="text-sm md:text-base">
+                  {isAdmin 
+                    ? "Gestiona las quejas y sugerencias de los usuarios"
+                    : "Envía tus comentarios y sugerencias"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <Button className="w-full bg-blue-600 hover:bg-blue-700 text-sm md:text-base">
+                  {isAdmin ? "Gestionar Mensajes" : "Ir a Quejas y Sugerencias"}
                 </Button>
               </CardContent>
             </Card>

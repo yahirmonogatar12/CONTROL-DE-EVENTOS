@@ -72,6 +72,10 @@ interface AuthContextType {
   createUser: (email: string, password: string, role: UserRole, name?: string) => Promise<{ success: boolean; message: string }>
   getAllUsers: () => Promise<Array<{ id: string; email: string; role: string; name: string }>>
   deleteUser: (userId: string) => Promise<void>
+  submitComplaint: (type: 'queja' | 'sugerencia', subject: string, message: string) => Promise<{ success: boolean; message: string }>
+  getUserComplaints: () => Promise<any[]>
+  getAllComplaints: () => Promise<any[]>
+  updateComplaintStatus: (id: string, status: string, adminResponse?: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -975,6 +979,95 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const submitComplaint = async (type: 'queja' | 'sugerencia', subject: string, message: string): Promise<{ success: boolean; message: string }> => {
+    if (!user) {
+      return { success: false, message: "Debes iniciar sesión para enviar una queja o sugerencia" }
+    }
+
+    try {
+      const { error } = await supabase.from("complaints_suggestions").insert({
+        user_email: user.email,
+        user_name: user.name,
+        type,
+        subject,
+        message,
+        status: 'pendiente',
+      })
+
+      if (error) throw error
+
+      return { success: true, message: "Tu mensaje ha sido enviado exitosamente" }
+    } catch (error) {
+      console.error("Error submitting complaint:", error)
+      return { success: false, message: "Error al enviar el mensaje" }
+    }
+  }
+
+  const getUserComplaints = async () => {
+    if (!user) return []
+
+    try {
+      const { data, error } = await supabase
+        .from("complaints_suggestions")
+        .select("*")
+        .eq("user_email", user.email)
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error("Error getting user complaints:", error)
+      return []
+    }
+  }
+
+  const getAllComplaints = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("complaints_suggestions")
+        .select("*")
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error("Error getting all complaints:", error)
+      return []
+    }
+  }
+
+  const updateComplaintStatus = async (id: string, status: string, adminResponse?: string) => {
+    const userIsAdmin = user?.role === "admin" || user?.role === "global-admin"
+    if (!user || !userIsAdmin) {
+      throw new Error("No tienes permisos para actualizar quejas")
+    }
+
+    try {
+      const updateData: any = {
+        status,
+        admin_email: user.email,
+      }
+
+      if (adminResponse) {
+        updateData.admin_response = adminResponse
+      }
+
+      if (status === 'resuelto') {
+        updateData.resolved_at = new Date().toISOString()
+      }
+
+      const { error } = await supabase
+        .from("complaints_suggestions")
+        .update(updateData)
+        .eq("id", id)
+
+      if (error) throw error
+    } catch (error) {
+      console.error("Error updating complaint:", error)
+      throw error
+    }
+  }
+
   if (isLoading) {
     return null
   }
@@ -1007,6 +1100,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         createUser,
         getAllUsers,
         deleteUser,
+        submitComplaint,
+        getUserComplaints,
+        getAllComplaints,
+        updateComplaintStatus,
       }}
     >
       {children}

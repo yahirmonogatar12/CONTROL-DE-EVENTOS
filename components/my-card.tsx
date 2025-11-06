@@ -294,17 +294,6 @@ export function MyCard() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="seguimientoBuzon" className="text-sm font-medium">Seguimiento de buzón *</Label>
-              <Textarea
-                id="seguimientoBuzon"
-                value={formData.seguimientoBuzon}
-                onChange={(e) => setFormData({ ...formData, seguimientoBuzon: e.target.value })}
-                className="min-h-[80px]"
-                required
-              />
-            </div>
-
             {/* Botones */}
             <div className="flex gap-2 pt-4">
               <Button type="submit" className="flex-1 bg-green-600 hover:bg-green-700">

@@ -331,21 +331,6 @@ export function CardRegistrationForm() {
             />
           </div>
 
-          {/* Seguimiento de buzón */}
-          <div className="space-y-2">
-            <Label htmlFor="seguimientoBuzon" className="text-sm md:text-base font-medium text-neutral-900">
-              Seguimiento de buzón <span className="text-red-500">*</span>
-            </Label>
-            <Textarea
-              id="seguimientoBuzon"
-              placeholder="Seguimiento del buzón"
-              value={formData.seguimientoBuzon}
-              onChange={(e) => setFormData({ ...formData, seguimientoBuzon: e.target.value })}
-              className="min-h-[80px] text-sm md:text-base resize-none"
-              required
-            />
-          </div>
-
           <Button
             type="submit"
             className="w-full h-10 md:h-12 text-sm md:text-base font-medium bg-neutral-900 hover:bg-neutral-800 text-white"

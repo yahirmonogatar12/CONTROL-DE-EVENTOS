@@ -46,7 +46,9 @@ export async function GET(request: NextRequest) {
         }
         
         // Crear un script para guardar en localStorage desde el cliente
-        const response = NextResponse.redirect(new URL('/', requestUrl.origin))
+        // Usar la URL correcta dependiendo del entorno
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || requestUrl.origin
+        const response = NextResponse.redirect(new URL('/', baseUrl))
         response.headers.set('Set-Cookie', `user_data=${JSON.stringify(userForStorage)}; Path=/; Max-Age=86400; SameSite=Lax`)
         return response
       }
@@ -54,5 +56,6 @@ export async function GET(request: NextRequest) {
   }
 
   // Redirigir al inicio
-  return NextResponse.redirect(new URL('/', requestUrl.origin))
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || requestUrl.origin
+  return NextResponse.redirect(new URL('/', baseUrl))
 }
