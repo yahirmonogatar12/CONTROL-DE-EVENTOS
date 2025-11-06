@@ -298,10 +298,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithGoogle = async () => {
     try {
+      const redirectUrl = process.env.NEXT_PUBLIC_APP_URL 
+        ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`
+        : `${window.location.origin}/auth/callback`
+      
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: redirectUrl,
         },
       })
 
@@ -314,10 +318,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithApple = async () => {
     try {
+      const redirectUrl = process.env.NEXT_PUBLIC_APP_URL 
+        ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`
+        : `${window.location.origin}/auth/callback`
+      
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'apple',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: redirectUrl,
         },
       })
 
@@ -344,11 +352,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Crear usuario en Supabase Auth (esto enviará el correo de verificación)
+      const redirectUrl = process.env.NEXT_PUBLIC_APP_URL 
+        ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback`
+        : `${window.location.origin}/auth/callback`
+      
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: redirectUrl,
           data: {
             full_name: name,
           }
