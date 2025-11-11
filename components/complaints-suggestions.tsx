@@ -10,13 +10,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { MessageSquare, Send, CheckCircle, AlertCircle, Clock, X } from "lucide-react"
+import { MessageSquare, Send, CheckCircle, AlertCircle, Clock, X, Search, Image as ImageIcon, Upload } from "lucide-react"
 
 export function ComplaintsSuggestions() {
   const { user, submitComplaint, getUserComplaints, getAllComplaints, updateComplaintStatus, isAdmin } = useAuth()
   const [type, setType] = useState<'queja' | 'sugerencia'>('queja')
   const [subject, setSubject] = useState("")
   const [message, setMessage] = useState("")
+  const [images, setImages] = useState<File[]>([])
+  const [imagePreview, setImagePreview] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
@@ -25,6 +27,7 @@ export function ComplaintsSuggestions() {
   const [selectedComplaint, setSelectedComplaint] = useState<any>(null)
   const [adminResponse, setAdminResponse] = useState("")
   const [newStatus, setNewStatus] = useState("")
+  const [searchTerm, setSearchTerm] = useState("")
 
   useEffect(() => {
     loadComplaints()
@@ -40,6 +43,34 @@ export function ComplaintsSuggestions() {
     }
   }
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length + images.length > 5) {
+      setError("Máximo 5 imágenes permitidas")
+      return
+    }
+
+    setImages([...images, ...files])
+
+    // Crear previews
+    const newPreviews: string[] = []
+    files.forEach(file => {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        newPreviews.push(reader.result as string)
+        if (newPreviews.length === files.length) {
+          setImagePreview([...imagePreview, ...newPreviews])
+        }
+      }
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const removeImage = (index: number) => {
+    setImages(images.filter((_, i) => i !== index))
+    setImagePreview(imagePreview.filter((_, i) => i !== index))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
@@ -52,12 +83,14 @@ export function ComplaintsSuggestions() {
 
     setIsLoading(true)
 
-    const result = await submitComplaint(type, subject, message)
+    const result = await submitComplaint(type, subject, message, images)
 
     if (result.success) {
       setSuccess(true)
       setSubject("")
       setMessage("")
+      setImages([])
+      setImagePreview([])
       setTimeout(() => setSuccess(false), 3000)
       loadComplaints()
     } else {
@@ -94,6 +127,19 @@ export function ComplaintsSuggestions() {
       ? <Badge variant="destructive">Queja</Badge>
       : <Badge className="bg-blue-600">Sugerencia</Badge>
   }
+
+  // Filtrar quejas por búsqueda
+  const filteredComplaints = (isAdmin ? allComplaints : userComplaints).filter(complaint => {
+    if (!searchTerm) return true
+    
+    const searchLower = searchTerm.toLowerCase()
+    return (
+      complaint.folio?.toLowerCase().includes(searchLower) ||
+      complaint.subject?.toLowerCase().includes(searchLower) ||
+      complaint.user_name?.toLowerCase().includes(searchLower) ||
+      complaint.user_email?.toLowerCase().includes(searchLower)
+    )
+  })
 
   return (
     <div className="space-y-6">
@@ -155,6 +201,51 @@ export function ComplaintsSuggestions() {
                 />
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="images">Imágenes (Opcional - Máximo 5)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="images"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageChange}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => document.getElementById('images')?.click()}
+                    className="w-full"
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Subir Imágenes ({images.length}/5)
+                  </Button>
+                </div>
+                {imagePreview.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    {imagePreview.map((preview, index) => (
+                      <div key={index} className="relative">
+                        <img
+                          src={preview}
+                          alt={`Preview ${index + 1}`}
+                          className="w-full h-24 object-cover rounded border"
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => removeImage(index)}
+                          className="absolute top-1 right-1 h-6 w-6 p-0"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {error && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
@@ -193,13 +284,26 @@ export function ComplaintsSuggestions() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {(isAdmin ? allComplaints : userComplaints).length === 0 ? (
+          {/* Buscador */}
+          <div className="mb-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-neutral-400" />
+              <Input
+                placeholder={`Buscar por ${isAdmin ? 'folio, nombre o correo' : 'folio o asunto'}...`}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
+
+          {filteredComplaints.length === 0 ? (
             <div className="text-center py-8 text-neutral-500">
-              No hay mensajes para mostrar
+              {searchTerm ? "No se encontraron resultados" : "No hay mensajes para mostrar"}
             </div>
           ) : (
             <div className="space-y-4">
-              {(isAdmin ? allComplaints : userComplaints).map((complaint) => (
+              {filteredComplaints.map((complaint) => (
                 <Card key={complaint.id} className="border-neutral-200">
                   <CardContent className="pt-4">
                     <div className="space-y-3">
@@ -233,6 +337,35 @@ export function ComplaintsSuggestions() {
                       <p className="text-sm text-neutral-700 whitespace-pre-wrap">
                         {complaint.message}
                       </p>
+
+                      {/* Mostrar imágenes si existen */}
+                      {complaint.images && complaint.images.length > 0 && (
+                        <div className="mt-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <ImageIcon className="w-4 h-4 text-neutral-500" />
+                            <p className="text-xs font-semibold text-neutral-600">
+                              Imágenes adjuntas ({complaint.images.length})
+                            </p>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            {complaint.images.map((imageUrl: string, index: number) => (
+                              <a
+                                key={index}
+                                href={imageUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block"
+                              >
+                                <img
+                                  src={imageUrl}
+                                  alt={`Imagen ${index + 1}`}
+                                  className="w-full h-24 object-cover rounded border hover:opacity-80 transition-opacity"
+                                />
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       {complaint.admin_response && (
                         <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">

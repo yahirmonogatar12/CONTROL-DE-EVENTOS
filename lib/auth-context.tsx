@@ -83,7 +83,7 @@ interface AuthContextType {
   createUser: (email: string, password: string, role: UserRole, name?: string) => Promise<{ success: boolean; message: string }>
   getAllUsers: () => Promise<Array<{ id: string; email: string; role: string; name: string }>>
   deleteUser: (userId: string) => Promise<void>
-  submitComplaint: (type: 'queja' | 'sugerencia', subject: string, message: string) => Promise<{ success: boolean; message: string }>
+  submitComplaint: (type: 'queja' | 'sugerencia', subject: string, message: string, images?: File[]) => Promise<{ success: boolean; message: string }>
   getUserComplaints: () => Promise<any[]>
   getAllComplaints: () => Promise<any[]>
   updateComplaintStatus: (id: string, status: string, adminResponse?: string) => Promise<void>
@@ -1047,12 +1047,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const submitComplaint = async (type: 'queja' | 'sugerencia', subject: string, message: string): Promise<{ success: boolean; message: string }> => {
+  const submitComplaint = async (type: 'queja' | 'sugerencia', subject: string, message: string, images?: File[]): Promise<{ success: boolean; message: string }> => {
     if (!user) {
       return { success: false, message: "Debes iniciar sesión para enviar una queja o sugerencia" }
     }
 
     try {
+      const imageUrls: string[] = []
+
+      // Subir imágenes a Supabase Storage
+      if (images && images.length > 0) {
+        for (const image of images) {
+          const fileExt = image.name.split('.').pop()
+          const fileName = `${user.email}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
+          
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('complaint-images')
+            .upload(fileName, image, {
+              cacheControl: '3600',
+              upsert: false
+            })
+
+          if (uploadError) {
+            console.error('Error uploading image:', uploadError)
+            continue // Continuar con las demás imágenes si una falla
+          }
+
+          // Obtener URL pública de la imagen
+          const { data: urlData } = supabase.storage
+            .from('complaint-images')
+            .getPublicUrl(fileName)
+          
+          if (urlData?.publicUrl) {
+            imageUrls.push(urlData.publicUrl)
+          }
+        }
+      }
+
       const { error } = await supabase.from("complaints_suggestions").insert({
         user_email: user.email,
         user_name: user.name,
@@ -1060,6 +1091,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         subject,
         message,
         status: 'pendiente',
+        images: imageUrls,
       })
 
       if (error) throw error
