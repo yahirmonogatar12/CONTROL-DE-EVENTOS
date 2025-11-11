@@ -929,7 +929,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log("👤 Creando nuevo usuario:", email, "con rol:", role)
 
-      // Verificar si el usuario ya existe
+      // Verificar si el usuario ya existe en la tabla users
       const { data: existingUser } = await supabase
         .from("users")
         .select("email")
@@ -940,17 +940,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, message: "El usuario ya existe" }
       }
 
-      // Hashear la contraseña
+      // Paso 1: Crear usuario en Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true, // Auto-confirmar el email
+        user_metadata: {
+          name: name || email.split("@")[0],
+          role: role || "user"
+        }
+      })
+
+      if (authError) {
+        console.error("❌ Error al crear usuario en Auth:", authError)
+        return { success: false, message: authError.message }
+      }
+
+      console.log("✅ Usuario creado en Auth:", authData.user.id)
+
+      // Paso 2: Hashear la contraseña para la tabla users
       const hashedPassword = await bcrypt.hash(password, 10)
       console.log("🔐 Contraseña hasheada")
 
       // Usar el nombre proporcionado o el email como fallback
       const userName = name || email.split("@")[0]
 
-      // Insertar usuario en Supabase
+      // Paso 3: Insertar usuario en la tabla users con el ID de Auth
       const { data, error } = await supabase
         .from("users")
         .insert({
+          id: authData.user.id, // Usar el ID de auth.users
           email,
           name: userName,
           password: hashedPassword,
@@ -960,11 +979,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single()
 
       if (error) {
-        console.error("❌ Error al crear usuario:", error)
+        console.error("❌ Error al crear usuario en tabla:", error)
+        // Si falla, intentar eliminar el usuario de Auth para mantener consistencia
+        await supabase.auth.admin.deleteUser(authData.user.id)
         return { success: false, message: error.message }
       }
 
-      console.log("✅ Usuario creado exitosamente:", data)
+      console.log("✅ Usuario creado exitosamente en ambas tablas")
       return { success: true, message: "Usuario creado exitosamente" }
     } catch (error: any) {
       console.error("❌ Error al crear usuario:", error)
