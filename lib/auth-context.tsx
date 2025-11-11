@@ -940,20 +940,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, message: "El usuario ya existe" }
       }
 
-      // Paso 1: Crear usuario en Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      // Paso 1: Crear usuario en Supabase Auth usando signUp
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
-        email_confirm: true, // Auto-confirmar el email
-        user_metadata: {
-          name: name || email.split("@")[0],
-          role: role || "user"
+        options: {
+          data: {
+            name: name || email.split("@")[0],
+            role: role || "user"
+          },
+          emailRedirectTo: undefined // No enviar email de confirmación
         }
       })
 
       if (authError) {
         console.error("❌ Error al crear usuario en Auth:", authError)
         return { success: false, message: authError.message }
+      }
+
+      if (!authData.user) {
+        return { success: false, message: "Error al crear usuario en autenticación" }
       }
 
       console.log("✅ Usuario creado en Auth:", authData.user.id)
@@ -980,13 +986,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error("❌ Error al crear usuario en tabla:", error)
-        // Si falla, intentar eliminar el usuario de Auth para mantener consistencia
-        await supabase.auth.admin.deleteUser(authData.user.id)
         return { success: false, message: error.message }
       }
 
       console.log("✅ Usuario creado exitosamente en ambas tablas")
-      return { success: true, message: "Usuario creado exitosamente" }
+      return { success: true, message: "Usuario creado exitosamente. IMPORTANTE: El usuario debe confirmar su email antes de poder iniciar sesión." }
     } catch (error: any) {
       console.error("❌ Error al crear usuario:", error)
       return { success: false, message: error?.message || "Error desconocido" }
