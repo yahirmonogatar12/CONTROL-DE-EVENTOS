@@ -9,10 +9,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ProtectedRoute } from "@/components/protected-route"
-import { ArrowLeft, UserPlus, Trash2, Search, Loader2 } from "lucide-react"
+import { ArrowLeft, UserPlus, Trash2, Search, Loader2, CreditCard } from "lucide-react"
 import Link from "next/link"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useAuth } from "@/lib/auth-context"
+import { AdminCardFormDialog } from "@/components/admin-card-form-dialog"
 
 interface NewUser {
   name: string
@@ -40,6 +41,10 @@ export default function UsuariosPage() {
 
   const [searchTerm, setSearchTerm] = useState("")
   const [roleFilter, setRoleFilter] = useState<"all" | "global-admin" | "admin" | "user">("all")
+
+  // Estado para el diálogo de tarjeta
+  const [selectedUser, setSelectedUser] = useState<{ email: string; name: string } | null>(null)
+  const [isCardDialogOpen, setIsCardDialogOpen] = useState(false)
 
   // Cargar usuarios al iniciar
   useEffect(() => {
@@ -126,6 +131,16 @@ export default function UsuariosPage() {
     // Regular admins cannot delete global admins
     if (userRole === "global-admin") return false
     return true
+  }
+
+  const handleOpenCardDialog = (userEmail: string, userName: string) => {
+    setSelectedUser({ email: userEmail, name: userName })
+    setIsCardDialogOpen(true)
+  }
+
+  const handleCloseCardDialog = () => {
+    setIsCardDialogOpen(false)
+    setSelectedUser(null)
   }
 
   return (
@@ -271,20 +286,31 @@ export default function UsuariosPage() {
                         key={user.id}
                         className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg border"
                       >
-                        <div>
+                        <div className="flex-1">
                           <p className="font-medium text-neutral-900">{user.name}</p>
                           <p className="text-sm text-neutral-500">{user.email}</p>
                           <p className="text-xs text-neutral-400 mt-1">{getRoleLabel(user.role)}</p>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteUser(user.id, user.role)}
-                          disabled={!canDeleteUser(user.role)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenCardDialog(user.email, user.name)}
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          >
+                            <CreditCard className="w-4 h-4 mr-1" />
+                            Tarjeta
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteUser(user.id, user.role)}
+                            disabled={!canDeleteUser(user.role)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
                     ))
                   )}
@@ -292,6 +318,21 @@ export default function UsuariosPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Diálogo de gestión de tarjeta */}
+          {selectedUser && (
+            <AdminCardFormDialog
+              isOpen={isCardDialogOpen}
+              onClose={handleCloseCardDialog}
+              userEmail={selectedUser.email}
+              userName={selectedUser.name}
+              onSuccess={() => {
+                setMessageType("success")
+                setMessage("Tarjeta guardada exitosamente")
+                setTimeout(() => setMessage(""), 3000)
+              }}
+            />
+          )}
         </div>
       </div>
     </ProtectedRoute>

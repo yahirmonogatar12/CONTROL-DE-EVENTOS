@@ -7,6 +7,7 @@
 -- Crear tabla de quejas y sugerencias
 CREATE TABLE IF NOT EXISTS complaints_suggestions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  folio TEXT UNIQUE NOT NULL,
   user_email TEXT NOT NULL,
   user_name TEXT NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('queja', 'sugerencia')),
@@ -20,7 +21,47 @@ CREATE TABLE IF NOT EXISTS complaints_suggestions (
   resolved_at TIMESTAMP WITH TIME ZONE
 );
 
+-- Crear secuencia para el folio
+CREATE SEQUENCE IF NOT EXISTS complaints_folio_seq START WITH 1000;
+
+-- Función para generar folio único
+CREATE OR REPLACE FUNCTION generate_complaint_folio()
+RETURNS TEXT AS $$
+DECLARE
+  new_folio TEXT;
+  folio_prefix TEXT;
+BEGIN
+  -- Generar prefijo basado en el tipo (Q para queja, S para sugerencia)
+  -- Por ahora usamos 'CS' (Complaint/Suggestion) genérico
+  folio_prefix := 'CS';
+  
+  -- Generar folio con formato: CS-YYYY-NNNN
+  new_folio := folio_prefix || '-' || 
+               TO_CHAR(NOW(), 'YYYY') || '-' || 
+               LPAD(nextval('complaints_folio_seq')::TEXT, 4, '0');
+  
+  RETURN new_folio;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger para asignar folio automáticamente
+CREATE OR REPLACE FUNCTION set_complaint_folio()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.folio IS NULL OR NEW.folio = '' THEN
+    NEW.folio := generate_complaint_folio();
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER complaints_set_folio_trigger
+  BEFORE INSERT ON complaints_suggestions
+  FOR EACH ROW
+  EXECUTE FUNCTION set_complaint_folio();
+
 -- Índices para búsquedas rápidas
+CREATE INDEX IF NOT EXISTS idx_complaints_folio ON complaints_suggestions(folio);
 CREATE INDEX IF NOT EXISTS idx_complaints_user_email ON complaints_suggestions(user_email);
 CREATE INDEX IF NOT EXISTS idx_complaints_status ON complaints_suggestions(status);
 CREATE INDEX IF NOT EXISTS idx_complaints_type ON complaints_suggestions(type);
@@ -81,6 +122,7 @@ FROM complaints_suggestions;
 CREATE OR REPLACE FUNCTION get_user_complaints(user_email_param TEXT)
 RETURNS TABLE (
   id UUID,
+  folio TEXT,
   type TEXT,
   subject TEXT,
   message TEXT,
@@ -93,6 +135,7 @@ BEGIN
   RETURN QUERY
   SELECT 
     cs.id,
+    cs.folio,
     cs.type,
     cs.subject,
     cs.message,
@@ -110,6 +153,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION get_all_complaints()
 RETURNS TABLE (
   id UUID,
+  folio TEXT,
   user_email TEXT,
   user_name TEXT,
   type TEXT,
@@ -126,6 +170,7 @@ BEGIN
   RETURN QUERY
   SELECT 
     cs.id,
+    cs.folio,
     cs.user_email,
     cs.user_name,
     cs.type,

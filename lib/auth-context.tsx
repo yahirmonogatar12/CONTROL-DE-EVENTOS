@@ -68,6 +68,7 @@ interface AuthContextType {
   isGlobalAdmin: boolean
   registerCard: (cardData: CardData) => Promise<void>
   updateCard: (cardData: CardData) => Promise<void>
+  getUserCard: (userEmail: string) => Promise<CardData | null>
   hasCard: boolean
   events: Event[]
   createEvent: (eventData: Omit<Event, "id" | "qrCode" | "confirmationCode" | "attendees" | "createdBy">) => Promise<void>
@@ -469,6 +470,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         full: error
       })
       throw error
+    }
+  }
+
+  const getUserCard = async (userEmail: string): Promise<CardData | null> => {
+    try {
+      console.log("🔍 Buscando tarjeta para:", userEmail)
+      
+      const { data, error } = await supabase
+        .from("cards")
+        .select("*")
+        .eq("user_email", userEmail)
+        .single()
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No se encontró la tarjeta
+          console.log("📭 No se encontró tarjeta para:", userEmail)
+          return null
+        }
+        throw error
+      }
+
+      if (!data) {
+        return null
+      }
+
+      // Mapear los datos de la base de datos al formato CardData
+      const cardData: CardData = {
+        referente: data.referente || "",
+        name: data.nombre || "",
+        apellidoPaterno: data.apellido_paterno || "",
+        apellidoMaterno: data.apellido_materno || "",
+        telefono: data.telefono || "",
+        correoElectronico: data.correo_electronico || "",
+        calleNumero: data.calle_numero || "",
+        colonia: data.colonia || "",
+        municipio: data.municipio || "",
+        estado: data.estado || "",
+        edad: data.edad || 0,
+        sexo: data.sexo || "",
+        seccion: data.seccion || "",
+        necesidad: data.necesidad || "",
+        buzon: data.buzon || "",
+        seguimientoBuzon: data.seguimiento_buzon || "",
+      }
+
+      console.log("✅ Tarjeta encontrada:", cardData)
+      return cardData
+    } catch (error: any) {
+      console.error("❌ Error obteniendo tarjeta:", error)
+      return null
     }
   }
 
@@ -1102,6 +1154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isGlobalAdmin: user?.role === "global-admin",
         registerCard,
         updateCard,
+        getUserCard,
         hasCard: !!user?.card,
         events,
         createEvent,

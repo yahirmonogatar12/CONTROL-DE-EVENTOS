@@ -128,14 +128,14 @@ export function RegisterWithCodeDialog({ open, onOpenChange, initialTab = "manua
     setIsScanning(false)
   }
 
-  const handleQRCodeScanned = (scannedText: string) => {
+  const handleQRCodeScanned = async (scannedText: string) => {
     // Extract confirmation code from QR
     // QR format: EVENT-{eventId}-{confirmationCode}
     const parts = scannedText.split("-")
     const confirmationCode = parts[parts.length - 1]
     
     if (confirmationCode && user) {
-      const success = registerAttendanceByCode(confirmationCode, user.email)
+      const success = await registerAttendanceByCode(confirmationCode, user.email)
       
       if (success) {
         setStatus("success")
@@ -150,7 +150,7 @@ export function RegisterWithCodeDialog({ open, onOpenChange, initialTab = "manua
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!user) {
@@ -165,7 +165,7 @@ export function RegisterWithCodeDialog({ open, onOpenChange, initialTab = "manua
       return
     }
 
-    const success = registerAttendanceByCode(code.toUpperCase().trim(), user.email)
+    const success = await registerAttendanceByCode(code.toUpperCase().trim(), user.email)
     
     if (success) {
       setStatus("success")

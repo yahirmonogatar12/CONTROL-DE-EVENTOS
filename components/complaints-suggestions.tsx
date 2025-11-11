@@ -206,6 +206,11 @@ export function ComplaintsSuggestions() {
                       <div className="flex items-start justify-between gap-2">
                         <div className="space-y-1 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
+                            {complaint.folio && (
+                              <Badge variant="outline" className="font-mono text-xs">
+                                {complaint.folio}
+                              </Badge>
+                            )}
                             {getTypeBadge(complaint.type)}
                             {getStatusBadge(complaint.status)}
                           </div>
