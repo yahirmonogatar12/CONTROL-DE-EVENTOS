@@ -98,7 +98,7 @@ export default function RegistroPage() {
               <Input
                 id="name"
                 type="text"
-                placeholder="Juan Pérez"
+                placeholder="Nombre completo"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required

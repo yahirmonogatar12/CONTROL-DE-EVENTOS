@@ -54,6 +54,7 @@ export interface Event {
   attendees: string[]
   createdBy: string
   suspended?: boolean
+  image_url?: string
 }
 
 interface AuthContextType {
@@ -71,7 +72,7 @@ interface AuthContextType {
   getUserCard: (userEmail: string) => Promise<CardData | null>
   hasCard: boolean
   events: Event[]
-  createEvent: (eventData: Omit<Event, "id" | "qrCode" | "confirmationCode" | "attendees" | "createdBy">) => Promise<void>
+  createEvent: (eventData: Omit<Event, "id" | "qrCode" | "confirmationCode" | "attendees" | "createdBy">, image?: File) => Promise<void>
   deleteEvent: (eventId: string) => Promise<{ success: boolean; message: string; hasAttendees?: boolean }>
   suspendEvent: (eventId: string) => Promise<void>
   registerAttendance: (eventId: string, userEmail: string) => Promise<void>
@@ -236,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             attendees: attendeesData?.map((a) => a.user_email) || [],
             createdBy: event.created_by,
             suspended: event.suspended || false,
+            image_url: event.image_url,
           }
         })
       )
@@ -581,7 +583,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const createEvent = async (eventData: Omit<Event, "id" | "qrCode" | "confirmationCode" | "attendees" | "createdBy">) => {
+  const createEvent = async (eventData: Omit<Event, "id" | "qrCode" | "confirmationCode" | "attendees" | "createdBy">, image?: File) => {
     if (!user) return
 
     try {
@@ -595,6 +597,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         createdBy: user.id
       })
 
+      let imageUrl: string | null = null
+
+      // Subir imagen a Supabase Storage si existe
+      if (image) {
+        const fileExt = image.name.split('.').pop()
+        const fileName = `${user.id}/${eventId}-${Date.now()}.${fileExt}`
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('event-images')
+          .upload(fileName, image, {
+            cacheControl: '3600',
+            upsert: false
+          })
+
+        if (uploadError) {
+          console.error('Error uploading event image:', uploadError)
+        } else {
+          // Obtener URL pública de la imagen
+          const { data: urlData } = supabase.storage
+            .from('event-images')
+            .getPublicUrl(fileName)
+          
+          if (urlData?.publicUrl) {
+            imageUrl = urlData.publicUrl
+          }
+        }
+      }
+
       const { data, error } = await supabase
         .from("events")
         .insert({
@@ -605,6 +635,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           qr_code: qrCode,
           confirmation_code: confirmationCode,
           created_by: user.id,
+          image_url: imageUrl,
         })
         .select()
         .single()

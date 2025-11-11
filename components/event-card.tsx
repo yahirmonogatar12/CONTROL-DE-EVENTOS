@@ -148,6 +148,15 @@ export function EventCard({ event }: EventCardProps) {
     <>
       <Card className="bg-white shadow-sm border border-neutral-200">
         <CardContent className="p-4 md:p-6">
+          {event.image_url && (
+            <div className="mb-4 rounded-lg overflow-hidden">
+              <img
+                src={event.image_url}
+                alt={event.title}
+                className="w-full h-48 md:h-64 object-cover"
+              />
+            </div>
+          )}
           <div className="flex flex-col sm:flex-row gap-4 mb-4">
             {isAdmin && (
               <div className="flex-shrink-0 mx-auto sm:mx-0">

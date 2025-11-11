@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/lib/auth-context"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { CalendarIcon, MapPin, Search } from "lucide-react"
+import { CalendarIcon, MapPin, Search, Image as ImageIcon, X } from "lucide-react"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
@@ -36,6 +36,8 @@ export function CreateEventDialog({ open, onOpenChange }: CreateEventDialogProps
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearching, setIsSearching] = useState(false)
   const [showLocationPicker, setShowLocationPicker] = useState(false)
+  const [eventImage, setEventImage] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
 
   const handleLocationSelect = (location: { address: string; lat: number; lng: number }) => {
     setFormData({
@@ -44,6 +46,27 @@ export function CreateEventDialog({ open, onOpenChange }: CreateEventDialogProps
       latitude: location.lat,
       longitude: location.lng
     })
+  }
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert("La imagen no puede superar los 5MB")
+        return
+      }
+      setEventImage(file)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleRemoveImage = () => {
+    setEventImage(null)
+    setImagePreview(null)
   }
 
   const handleSearchLocation = async () => {
@@ -122,11 +145,13 @@ export function CreateEventDialog({ open, onOpenChange }: CreateEventDialogProps
       date: format(date, "dd 'de' MMMM 'de' yyyy", { locale: es }),
       location: locationString,
       description: formData.description,
-    })
+    }, eventImage || undefined)
     onOpenChange(false)
     setFormData({ title: "", location: "", description: "", latitude: null, longitude: null })
     setSearchQuery("")
     setDate(new Date())
+    setEventImage(null)
+    setImagePreview(null)
   }
 
   return (
@@ -243,6 +268,54 @@ export function CreateEventDialog({ open, onOpenChange }: CreateEventDialogProps
               placeholder="Descripción del evento (opcional)"
               className="min-h-[100px] resize-none"
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="eventImage" className="text-sm font-medium">
+              Imagen del Evento
+            </Label>
+            <div className="space-y-2">
+              {imagePreview ? (
+                <div className="relative w-full h-48 rounded-lg overflow-hidden border-2 border-neutral-200">
+                  <img
+                    src={imagePreview}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-2 right-2 h-8 w-8"
+                    onClick={handleRemoveImage}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center w-full">
+                  <label
+                    htmlFor="eventImage"
+                    className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-neutral-300 rounded-lg cursor-pointer bg-neutral-50 hover:bg-neutral-100 transition-colors"
+                  >
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      <ImageIcon className="w-10 h-10 mb-2 text-neutral-400" />
+                      <p className="text-sm text-neutral-600">
+                        <span className="font-semibold">Click para subir</span> o arrastra
+                      </p>
+                      <p className="text-xs text-neutral-500">Máximo 5MB</p>
+                    </div>
+                    <input
+                      id="eventImage"
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleImageChange}
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex gap-3 pt-4">

@@ -12,6 +12,16 @@ import { ProtectedRoute } from "@/components/protected-route"
 import { ArrowLeft, UserPlus, Trash2, Search, Loader2, CreditCard } from "lucide-react"
 import Link from "next/link"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useAuth } from "@/lib/auth-context"
 import { AdminCardFormDialog } from "@/components/admin-card-form-dialog"
 
@@ -45,6 +55,10 @@ export default function UsuariosPage() {
   // Estado para el diálogo de tarjeta
   const [selectedUser, setSelectedUser] = useState<{ email: string; name: string } | null>(null)
   const [isCardDialogOpen, setIsCardDialogOpen] = useState(false)
+
+  // Estado para el diálogo de eliminación
+  const [userToDelete, setUserToDelete] = useState<{ id: string; name: string; role: string } | null>(null)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   // Cargar usuarios al iniciar
   useEffect(() => {
@@ -95,13 +109,27 @@ export default function UsuariosPage() {
       await deleteUser(userId)
       setMessageType("success")
       setMessage("Usuario eliminado exitosamente")
+      setShowDeleteDialog(false)
+      setUserToDelete(null)
       await loadUsers() // Recargar lista
     } catch (error) {
       setMessageType("error")
       setMessage("Error al eliminar usuario")
+      console.error("Error deleting user:", error)
     }
 
     setTimeout(() => setMessage(""), 3000)
+  }
+
+  const handleOpenDeleteDialog = (userId: string, userName: string, userRole: string) => {
+    if (!canDeleteUser(userRole)) {
+      setMessageType("error")
+      setMessage("No tienes permisos para eliminar este usuario")
+      setTimeout(() => setMessage(""), 3000)
+      return
+    }
+    setUserToDelete({ id: userId, name: userName, role: userRole })
+    setShowDeleteDialog(true)
   }
 
   const filteredUsers = users.filter((user) => {
@@ -304,7 +332,7 @@ export default function UsuariosPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDeleteUser(user.id, user.role)}
+                            onClick={() => handleOpenDeleteDialog(user.id, user.name, user.role)}
                             disabled={!canDeleteUser(user.role)}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
@@ -333,6 +361,28 @@ export default function UsuariosPage() {
               }}
             />
           )}
+
+          {/* Diálogo de confirmación de eliminación */}
+          <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta acción no se puede deshacer. Se eliminará permanentemente el usuario{" "}
+                  <span className="font-semibold">{userToDelete?.name}</span> del sistema.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setUserToDelete(null)}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => userToDelete && handleDeleteUser(userToDelete.id, userToDelete.role)}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  Eliminar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
     </ProtectedRoute>
