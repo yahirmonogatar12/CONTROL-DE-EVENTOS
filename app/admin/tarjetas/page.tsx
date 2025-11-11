@@ -7,22 +7,41 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ArrowLeft, Search, CreditCard } from "lucide-react"
 import Link from "next/link"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import QRCode from "qrcode"
 
 export default function TarjetasPage() {
   const { getAllUserCards } = useAuth()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCard, setSelectedCard] = useState<any>(null)
+  const [allCards, setAllCards] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  const allCards = getAllUserCards()
+  useEffect(() => {
+    const loadCards = async () => {
+      try {
+        setIsLoading(true)
+        const cards = await getAllUserCards()
+        console.log("Tarjetas cargadas:", cards)
+        setAllCards(cards || [])
+      } catch (error) {
+        console.error("Error cargando tarjetas:", error)
+        setAllCards([])
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    loadCards()
+  }, [])
 
-  const filteredCards = allCards.filter(
+  const filteredCards = Array.isArray(allCards) ? allCards.filter(
     (item) =>
-      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.card.curp?.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+      item?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item?.card?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item?.card?.apellidoPaterno?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item?.card?.apellidoMaterno?.toLowerCase().includes(searchTerm.toLowerCase()),
+  ) : []
 
   const generateQRCode = async (data: string) => {
     try {
@@ -93,41 +112,52 @@ export default function TarjetasPage() {
                     <CardContent className="p-6">
                       <div className="flex flex-col md:flex-row gap-6">
                         <div className="flex-1 space-y-4">
-                          <h3 className="text-2xl font-bold text-neutral-900">{selectedCard.card.name}</h3>
+                          <h3 className="text-2xl font-bold text-neutral-900">
+                            {selectedCard.card.name} {selectedCard.card.apellidoPaterno} {selectedCard.card.apellidoMaterno}
+                          </h3>
                           <div className="space-y-2 text-sm">
                             <p>
                               <span className="font-semibold">Email:</span> {selectedCard.email}
                             </p>
                             <p>
-                              <span className="font-semibold">CURP:</span> {selectedCard.card.curp}
+                              <span className="font-semibold">Correo Electrónico:</span> {selectedCard.card.correoElectronico}
+                            </p>
+                            <p>
+                              <span className="font-semibold">Teléfono:</span> {selectedCard.card.telefono}
                             </p>
                             <p>
                               <span className="font-semibold">Sexo:</span> {selectedCard.card.sexo}
                             </p>
                             <p>
-                              <span className="font-semibold">Folio:</span> {selectedCard.card.folioNo}
-                            </p>
-                            <p>
-                              <span className="font-semibold">Distrito:</span> {selectedCard.card.distrito}
+                              <span className="font-semibold">Edad:</span> {selectedCard.card.edad}
                             </p>
                             <p>
                               <span className="font-semibold">Sección:</span> {selectedCard.card.seccion}
                             </p>
                             <p>
-                              <span className="font-semibold">Dirección:</span> {selectedCard.card.address}
+                              <span className="font-semibold">Dirección:</span> {selectedCard.card.calleNumero}
                             </p>
                             <p>
-                              <span className="font-semibold">Teléfono:</span> {selectedCard.card.phone}
+                              <span className="font-semibold">Colonia:</span> {selectedCard.card.colonia}
                             </p>
-                            {selectedCard.card.programas && selectedCard.card.programas.length > 0 && (
+                            <p>
+                              <span className="font-semibold">Municipio:</span> {selectedCard.card.municipio}
+                            </p>
+                            <p>
+                              <span className="font-semibold">Estado:</span> {selectedCard.card.estado}
+                            </p>
+                            <p>
+                              <span className="font-semibold">Referente:</span> {selectedCard.card.referente}
+                            </p>
+                            <p>
+                              <span className="font-semibold">Necesidad:</span> {selectedCard.card.necesidad}
+                            </p>
+                            <p>
+                              <span className="font-semibold">Buzón:</span> {selectedCard.card.buzon}
+                            </p>
+                            {selectedCard.card.seguimientoBuzon && (
                               <p>
-                                <span className="font-semibold">Programas:</span>{" "}
-                                {selectedCard.card.programas.join(", ")}
-                              </p>
-                            )}
-                            {selectedCard.card.fecha && (
-                              <p>
-                                <span className="font-semibold">Fecha:</span> {selectedCard.card.fecha}
+                                <span className="font-semibold">Seguimiento Buzón:</span> {selectedCard.card.seguimientoBuzon}
                               </p>
                             )}
                           </div>
@@ -143,16 +173,20 @@ export default function TarjetasPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {filteredCards.length === 0 ? (
+                  {isLoading ? (
+                    <p className="text-center text-neutral-500 py-8">Cargando tarjetas...</p>
+                  ) : filteredCards.length === 0 ? (
                     <p className="text-center text-neutral-500 py-8">No se encontraron tarjetas</p>
                   ) : (
                     filteredCards.map((item) => (
                       <Card key={item.email} className="hover:shadow-md transition-shadow">
                         <CardContent className="p-4 flex items-center justify-between">
                           <div className="flex-1">
-                            <h3 className="font-semibold text-lg">{item.card.name}</h3>
+                            <h3 className="font-semibold text-lg">
+                              {item.card.name} {item.card.apellidoPaterno} {item.card.apellidoMaterno}
+                            </h3>
                             <p className="text-sm text-neutral-600">{item.email}</p>
-                            {item.card.curp && <p className="text-sm text-neutral-600">CURP: {item.card.curp}</p>}
+                            <p className="text-sm text-neutral-600">Sección: {item.card.seccion}</p>
                           </div>
                           <Button onClick={() => handleViewCard(item)} variant="outline">
                             Ver Tarjeta
