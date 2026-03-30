@@ -1,10 +1,9 @@
-import { createClient } from '@supabase/supabase-js'
+import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { cookies } from 'next/headers'
 
-// Función para obtener la URL base correcta
 const getBaseUrl = (requestUrl: URL) => {
-  // Si no es localhost, usar siempre la URL de producción
   if (requestUrl.hostname !== 'localhost') {
     return 'https://control-de-eventos.vercel.app'
   }
@@ -14,17 +13,33 @@ const getBaseUrl = (requestUrl: URL) => {
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
+  const baseUrl = getBaseUrl(requestUrl)
 
   if (code) {
-    const supabase = createClient(
+    const cookieStore = await cookies()
+
+    const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return cookieStore.getAll()
+          },
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              )
+            } catch {}
+          },
+        },
+      }
     )
-    
+
     const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-    
+
     if (!error && data.user) {
-      // Verificar si el usuario ya existe en la tabla users
       const { data: existingUser } = await supabase
         .from('users')
         .select('*')
@@ -33,19 +48,17 @@ export async function GET(request: NextRequest) {
 
       let userData = existingUser
 
-      // Si no existe, crearlo automáticamente como usuario normal
       if (!existingUser) {
         const { data: newUser } = await supabase.from('users').insert({
           email: data.user.email,
           name: data.user.user_metadata.full_name || data.user.email?.split('@')[0],
           role: 'user',
-          password: '', // No se usa para OAuth
+          password: '',
         }).select().single()
 
         userData = newUser
       }
 
-      // Guardar usuario en localStorage para que se sincronice con auth-context
       if (userData) {
         const userForStorage = {
           id: userData.id,
@@ -53,9 +66,7 @@ export async function GET(request: NextRequest) {
           role: userData.role,
           name: userData.name,
         }
-        
-        // Crear un script para guardar en localStorage desde el cliente
-        const baseUrl = getBaseUrl(requestUrl)
+
         const response = NextResponse.redirect(new URL('/', baseUrl))
         response.headers.set('Set-Cookie', `user_data=${JSON.stringify(userForStorage)}; Path=/; Max-Age=86400; SameSite=Lax`)
         return response
@@ -63,7 +74,5 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Redirigir al inicio
-  const baseUrl = getBaseUrl(requestUrl)
   return NextResponse.redirect(new URL('/', baseUrl))
 }
