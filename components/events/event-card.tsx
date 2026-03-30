@@ -18,8 +18,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { RegisterWithCodeDialog } from "@/components/register-with-code-dialog"
-import { EmbeddedMap } from "@/components/embedded-map"
+import { RegisterWithCodeDialog } from "@/components/events/register-with-code-dialog"
+import { EmbeddedMap } from "@/components/events/embedded-map"
 import { Separator } from "@/components/ui/separator"
 
 interface EventCardProps {

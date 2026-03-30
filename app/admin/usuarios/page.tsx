@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ProtectedRoute } from "@/components/protected-route"
+import { ProtectedRoute } from "@/components/auth/protected-route"
 import { ArrowLeft, UserPlus, Trash2, Search, Loader2, CreditCard } from "lucide-react"
 import Link from "next/link"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -23,7 +23,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useAuth } from "@/lib/auth-context"
-import { AdminCardFormDialog } from "@/components/admin-card-form-dialog"
+import { AdminCardFormDialog } from "@/components/admin/admin-card-form-dialog"
 
 interface NewUser {
   name: string

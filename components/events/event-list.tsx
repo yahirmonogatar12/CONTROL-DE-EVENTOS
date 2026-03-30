@@ -1,7 +1,7 @@
 "use client"
 
 import { useAuth } from "@/lib/auth-context"
-import { EventCard } from "@/components/event-card"
+import { EventCard } from "@/components/events/event-card"
 
 interface EventListProps {
   searchQuery: string

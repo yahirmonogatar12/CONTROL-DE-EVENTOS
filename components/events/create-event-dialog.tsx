@@ -15,8 +15,8 @@ import { CalendarIcon, MapPin, Search, Image as ImageIcon, X } from "lucide-reac
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { cn } from "@/lib/utils"
-import { EmbeddedMap } from "@/components/embedded-map"
-import { LocationPicker } from "@/components/location-picker"
+import { EmbeddedMap } from "@/components/events/embedded-map"
+import { LocationPicker } from "@/components/events/location-picker"
 
 interface CreateEventDialogProps {
   open: boolean

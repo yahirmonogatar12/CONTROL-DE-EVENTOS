@@ -1,12 +1,12 @@
 "use client"
 
-import { CardRegistrationForm } from "@/components/card-registration-form"
-import { MyCard } from "@/components/my-card"
-import { PointsLeaderboard } from "@/components/points-leaderboard"
+import { CardRegistrationForm } from "@/components/cards/card-registration-form"
+import { MyCard } from "@/components/cards/my-card"
+import { PointsLeaderboard } from "@/components/cards/points-leaderboard"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { ProtectedRoute } from "@/components/protected-route"
+import { ProtectedRoute } from "@/components/auth/protected-route"
 import { useAuth } from "@/lib/auth-context"
 
 export default function RegistroTarjetaPage() {

@@ -1,7 +1,7 @@
 "use client"
 
-import { ProtectedRoute } from "@/components/protected-route"
-import { UserEventHistory } from "@/components/user-event-history"
+import { ProtectedRoute } from "@/components/auth/protected-route"
+import { UserEventHistory } from "@/components/history/user-event-history"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"

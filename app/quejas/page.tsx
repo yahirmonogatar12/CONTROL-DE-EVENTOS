@@ -1,7 +1,7 @@
 "use client"
 
-import { ProtectedRoute } from "@/components/protected-route"
-import { ComplaintsSuggestions } from "@/components/complaints-suggestions"
+import { ProtectedRoute } from "@/components/auth/protected-route"
+import { ComplaintsSuggestions } from "@/components/complaints/complaints-suggestions"
 
 export default function QuejasPage() {
   return (

@@ -1,17 +1,17 @@
 "use client"
 
 import { useState } from "react"
-import { EventSearch } from "@/components/event-search"
-import { EventList } from "@/components/event-list"
-import { UserStats } from "@/components/user-stats"
-import { BottomNav } from "@/components/bottom-nav"
-import { RegisterWithCodeDialog } from "@/components/register-with-code-dialog"
+import { EventSearch } from "@/components/events/event-search"
+import { EventList } from "@/components/events/event-list"
+import { RegisterWithCodeDialog } from "@/components/events/register-with-code-dialog"
+import { UserStats } from "@/components/history/user-stats"
+import { BottomNav } from "@/components/layout/bottom-nav"
 import Link from "next/link"
 import { ArrowLeft, Plus, Ticket } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { ProtectedRoute } from "@/components/protected-route"
+import { ProtectedRoute } from "@/components/auth/protected-route"
 import { useAuth } from "@/lib/auth-context"
-import { CreateEventDialog } from "@/components/create-event-dialog"
+import { CreateEventDialog } from "@/components/events/create-event-dialog"
 
 export default function EventosPage() {
   const [activeTab, setActiveTab] = useState("eventos")

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls \"C:\\\\Users\\\\yahir\\\\OneDrive\\\\Documentos\\\\registration-app \\(2\\)\" -la)"
+    ]
+  }
+}
